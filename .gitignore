@@ -11,3 +11,9 @@ __pycache__/
 uploads/
 test-crops/
 models/
+
+# Local scanning sessions
+scanner.sqlite3*
+
+# Local code backups
+.scanner-backups/

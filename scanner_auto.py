@@ -93,33 +93,16 @@ def identify_type(text):
 
 
 def valid_written_date(text):
-    # Require visible separators. Never guess a date from "92866".
+    # Accept partial or full numeric dates without interpreting them.
+    # Examples: 10/26, 9/28/26, 09/28/2026.
     match = re.search(
-        r"\b(\d{1,2})\s*[/.-]\s*(\d{1,2})"
-        r"(?:\s*[/.-]\s*(\d{4}|\d{2}))?\b",
-        text,
+        r"(?<!\d)\d{1,4}\s*[/.-]\s*\d{1,4}"
+        r"(?:\s*[/.-]\s*\d{1,4})?(?!\d)",
+        str(text),
     )
-
     if not match:
         return ""
-
-    month, day, year = match.groups()
-
-    try:
-        full_year = int(year) if year else 2000
-
-        if year and len(year) == 2:
-            full_year += 2000
-
-        datetime(full_year, int(month), int(day))
-
-    except ValueError:
-        return ""
-
-    if year:
-        return f"{month}/{day}/{year}"
-
-    return f"{month}/{day}"
+    return re.sub(r"\s+", "", match.group())
 
 
 def read_text(engine, image, line=False):
