@@ -135,7 +135,7 @@ def download_csv(session_id: str, include_unreviewed: bool = False):
         })
 
 @app.get("/samples/{record_id}/images/{number}")
-def original_image(record_id: str, number: int):
+def original_image(record_id: str, number: int, download: bool = False):
     folder = folder_for(record_id)
     sample = json.loads((folder / "sample.json").read_text(encoding="utf-8"))
     images = sample["images"]
@@ -147,7 +147,7 @@ def original_image(record_id: str, number: int):
     path = folder / name
     if not path.is_file():
         raise HTTPException(404, "Photo not found.")
-    return FileResponse(path)
+    return FileResponse(path, filename=name if download else None)
 
 @app.get("/samples/{record_id}/evidence")
 def combined_image(record_id: str):

@@ -28,6 +28,14 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .status { white-space:pre-wrap; overflow-wrap:anywhere; }
 .preview { width:100%; height:auto; border:1px solid #d4dce5; }
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.camera-preview {
+    display:block; width:100%; max-height:65vh; margin:12px 0;
+    background:#101820; border:1px solid #d4dce5;
+}
+.photo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+.photo-item { min-width:0; margin:0; padding:8px; border:1px solid #d4dce5; border-radius:8px; }
+.photo-item img { display:block; width:100%; height:auto; }
+.photo-item figcaption { margin-top:6px; font-size:14px; }
 .field { width:100%; padding:11px; margin:6px 0; font:inherit;
          border:1px solid #aeb8c6; border-radius:6px; }
 .field.bad { border:2px solid #dc2626; background:#fff1f2; }
@@ -46,9 +54,6 @@ summary { cursor:pointer; padding:12px 0; }
 <body>
 <div class="toolbar">
     <h1>Sample Scanner</h1>
-    <input id="photos" type="file"
-        accept="image/jpeg,image/png,image/webp" multiple hidden>
-    <button id="upload" type="button">Upload sample</button>
     <a id="download" class="button" hidden>Download current CSV</a>
     <label style="display:block;margin:12px 0;font-size:15px;">
     <input id="include-unreviewed" type="checkbox">
@@ -58,10 +63,40 @@ summary { cursor:pointer; padding:12px 0; }
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
     <p class="muted">
-        Upload one tube at a time. Confirm finished cards with “All good”.
-        Only confirmed tubes enter the CSV.
+        Prepare and upload one tube at a time. Confirm finished cards with
+        “All good”. Only confirmed tubes enter the CSV.
     </p>
 </div>
+<section class="card" aria-labelledby="capture-heading">
+    <h2 id="capture-heading">Capture label photos</h2>
+    <p class="muted">
+        Keep the camera steady and rotate the tube by hand. Capture when the
+        label looks focused, use soft lighting to reduce glare, and overlap
+        views slightly when the label wraps around the tube.
+    </p>
+    <label for="camera-device">Camera</label>
+    <select id="camera-device" class="field" disabled>
+        <option value="">Default camera</option>
+    </select>
+    <button id="start-camera" type="button" disabled>Start camera</button>
+    <button id="stop-camera" type="button" disabled>Stop camera</button>
+    <video id="camera-preview" class="camera-preview" autoplay playsinline muted hidden></video>
+    <button id="capture-view" type="button" disabled>Capture view</button>
+    <p id="camera-status" class="muted status" role="status" aria-live="polite">
+        Webcam preview requires HTTPS or localhost. Allow camera access when prompted.
+    </p>
+    <h3>Photos for this tube (<span id="photo-count">0</span>/8)</h3>
+    <div id="photo-previews" class="photo-grid"></div>
+    <input id="photos" type="file"
+        accept="image/jpeg,image/png,image/webp" multiple hidden>
+    <button id="choose-photos" type="button" disabled>Add existing photos</button>
+    <button id="clear-photos" type="button" disabled>Clear photos</button>
+    <button id="upload" type="button" disabled>Upload sample</button>
+    <p class="muted">
+        All staged views are uploaded together as one sample. You can also add
+        existing JPG, PNG, or WebP photos.
+    </p>
+</section>
 <div id="waiting"></div>
 <div id="cards"></div>
 
@@ -75,8 +110,10 @@ const names = [
     ["reference_lube","Reference Lube"]
 ];
 const cards = new Map();
+const photoQueue = [];
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false;
+let cameraStream = null, cameraStarting = false;
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -159,8 +196,14 @@ function fieldStates(c) {
     c.el.classList.toggle("confirmed",c.check.checked && !c.dirty && !c.saveError);
 }
 function renderBar() {
-    $("#upload").disabled=uploading || !initialized;
+    $("#upload").disabled=uploading || !initialized || !photoQueue.length;
     $("#upload").textContent=uploading?"Uploading photos…":"Upload sample";
+    $("#choose-photos").disabled=uploading || !initialized;
+    $("#clear-photos").disabled=uploading || !photoQueue.length;
+    $("#capture-view").disabled=uploading || !cameraStream || photoQueue.length>=8;
+    $("#start-camera").disabled=uploading || !initialized || cameraStarting;
+    $("#stop-camera").disabled=uploading || !cameraStream;
+    $("#camera-device").disabled=uploading || !initialized;
     const blocked=writes>0 || [...cards.values()].some(c=>c.saveError);
     if(session) {
         const q=session.counts||{};
@@ -276,6 +319,11 @@ function addCard(job) {
         image.className="original"; image.loading="lazy";
         image.alt=`Original label photo ${n}`;
         originals.append(image);
+        const download=document.createElement("a");
+        download.className="button";
+        download.href=`${image.src}?download=true`;
+        download.textContent=`Download view ${n}`;
+        originals.append(download);
     }
     c.el.append(originals);
 
@@ -414,43 +462,190 @@ async function ensureSession() {
     }));
     sessionId=session.id; remember(); renderSession();
 }
-$("#include-unreviewed").onchange=renderBar;
-
-$("#upload").onclick=()=>{
-    if(uploading || !initialized) return;
-    $("#photos").value=""; $("#photos").click();
-};
-$("#photos").onchange=async()=>{
-    const files=Array.from($("#photos").files);
-    if(!files.length || uploading) return;
-    if(files.length>8) return say("Maximum 8 photos of one tube.",true);
+function renderPhotoQueue() {
+    $("#photo-count").textContent=photoQueue.length;
+    const gallery=$("#photo-previews");
+    gallery.replaceChildren();
+    photoQueue.forEach((photo,index)=>{
+        const figure=document.createElement("figure");
+        figure.className="photo-item";
+        const image=document.createElement("img");
+        image.src=photo.previewUrl;
+        image.alt=`Staged label view ${index+1}`;
+        const caption=document.createElement("figcaption");
+        caption.textContent=`View ${index+1}`;
+        const download=document.createElement("a");
+        download.className="button";
+        download.href=photo.previewUrl;
+        download.download=photo.file.name||`label_view_${index+1}.jpg`;
+        download.textContent="Download";
+        const remove=document.createElement("button");
+        remove.type="button";
+        remove.textContent="Remove";
+        remove.setAttribute("aria-label",`Remove view ${index+1}`);
+        remove.onclick=()=>{
+            const [removed]=photoQueue.splice(index,1);
+            URL.revokeObjectURL(removed.previewUrl);
+            renderPhotoQueue();
+            renderBar();
+        };
+        figure.append(image,caption,download,remove);
+        gallery.append(figure);
+    });
+}
+function addPhotos(files) {
+    if(photoQueue.length+files.length>8)
+        return say("Maximum 8 photos of one tube.",true);
     for(const file of files) {
         if(!["image/jpeg","image/png","image/webp"].includes(file.type))
             return say("Use JPG, PNG, or WebP. On iPhone, use Camera → Formats → Most Compatible.",true);
         if(!file.size || file.size>10*1024*1024)
             return say("Each photo must be nonempty and 10 MB or smaller.",true);
     }
+    files.forEach(file=>photoQueue.push({
+        file, previewUrl:URL.createObjectURL(file)
+    }));
+    renderPhotoQueue();
+    renderBar();
+    say(`${files.length} photo${files.length===1?"":"s"} added. Capture or add more views, then upload this tube.`);
+}
+function clearPhotos() {
+    photoQueue.forEach(photo=>URL.revokeObjectURL(photo.previewUrl));
+    photoQueue.length=0;
+    renderPhotoQueue();
+    renderBar();
+}
+async function loadCameraDevices(activeDeviceId) {
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const select=$("#camera-device");
+    const options=[new Option("Default camera","")];
+    devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>{
+        options.push(new Option(device.label||`Camera ${index+1}`,device.deviceId));
+    });
+    select.replaceChildren(...options);
+    select.value=activeDeviceId||"";
+}
+function stopCamera(updateStatus=true) {
+    if(cameraStream) cameraStream.getTracks().forEach(track=>track.stop());
+    cameraStream=null;
+    $("#camera-preview").srcObject=null;
+    $("#camera-preview").hidden=true;
+    renderBar();
+    if(updateStatus) $("#camera-status").textContent="Camera stopped.";
+}
+async function startCamera(deviceId="") {
+    if(cameraStarting) return;
+    if(!navigator.mediaDevices?.getUserMedia) {
+        $("#camera-status").textContent=
+            "This page cannot access a webcam. Open it over HTTPS or from localhost, then allow camera access.";
+        return;
+    }
+    cameraStarting=true;
+    stopCamera(false);
+    try {
+        const video={
+            width:{ideal:1280}, height:{ideal:720}
+        };
+        if(deviceId) video.deviceId={exact:deviceId};
+        cameraStream=await navigator.mediaDevices.getUserMedia({
+            video, audio:false
+        });
+        const preview=$("#camera-preview");
+        preview.srcObject=cameraStream;
+        preview.hidden=false;
+        await preview.play();
+        let deviceLoadMessage="";
+        try {
+            const activeId=cameraStream.getVideoTracks()[0].getSettings().deviceId;
+            await loadCameraDevices(activeId);
+        } catch(error) {
+            deviceLoadMessage=
+                `Preview started, but camera selection could not be loaded: ${error.message}`;
+        }
+        $("#camera-status").textContent=deviceLoadMessage ||
+            "Camera ready. Hold the tube still and capture each focused view.";
+    } catch(error) {
+        stopCamera(false);
+        $("#camera-status").textContent=
+            error.name==="NotAllowedError"
+                ? "Camera access was denied. Allow camera access in your browser and try again."
+                : error.name==="NotFoundError"
+                    ? "No camera was found. Connect the Logitech camera and try again."
+                    : `Could not start the camera: ${error.message}`;
+    } finally {
+        cameraStarting=false;
+        renderBar();
+    }
+}
+$("#include-unreviewed").onchange=renderBar;
+
+$("#start-camera").onclick=()=>startCamera($("#camera-device").value);
+$("#stop-camera").onclick=()=>stopCamera();
+$("#camera-device").onchange=()=>{
+    if(cameraStream) startCamera($("#camera-device").value);
+};
+$("#capture-view").onclick=()=>{
+    const preview=$("#camera-preview");
+    if(!cameraStream || !preview.videoWidth || !preview.videoHeight) {
+        $("#camera-status").textContent="Wait for the camera preview to become ready.";
+        return;
+    }
+    const canvas=document.createElement("canvas");
+    canvas.width=preview.videoWidth;
+    canvas.height=preview.videoHeight;
+    const context=canvas.getContext("2d");
+    if(!context) {
+        $("#camera-status").textContent="Could not prepare an image for capture.";
+        return;
+    }
+    context.drawImage(preview,0,0,canvas.width,canvas.height);
+    canvas.toBlob(blob=>{
+        if(!blob) {
+            $("#camera-status").textContent="Could not capture this view. Try again.";
+            return;
+        }
+        addPhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{
+            type:"image/jpeg", lastModified:Date.now()
+        })]);
+    },"image/jpeg",0.95);
+};
+$("#choose-photos").onclick=()=>{
+    if(uploading || !initialized) return;
+    $("#photos").value="";
+    $("#photos").click();
+};
+$("#clear-photos").onclick=clearPhotos;
+$("#upload").onclick=async()=>{
+    if(uploading || !initialized || !photoQueue.length) return;
+    const files=photoQueue.map(photo=>photo.file);
     uploading=true; renderBar(); say("Uploading…");
     try {
         await ensureSession();
         const form=new FormData();
-        files.forEach(file=>form.append("files",file));
+        files.forEach(file=>form.append("files",file,file.name));
         form.append("session_id",sessionId);
         form.append("date_received",today());
         await api("/upload",{method:"POST",body:form});
-        say("Queued. You can upload another tube.");
+        clearPhotos();
+        say("Queued. You can capture the next tube.");
         await refresh();
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
     } finally {
-        uploading=false; $("#photos").value=""; renderBar();
+        uploading=false; renderBar();
     }
 };
+$("#photos").onchange=()=>{
+    const files=Array.from($("#photos").files);
+    if(files.length && !uploading) addPhotos(files);
+    $("#photos").value="";
+};
 window.addEventListener("beforeunload",event=>{
-    if(uploading || writes || [...cards.values()].some(c=>c.dirty)) {
+    if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
     }
 });
+window.addEventListener("pagehide",()=>stopCamera(false));
 async function initialize() {
     renderBar();
     try {
@@ -469,6 +664,7 @@ async function initialize() {
         say("Could not connect. Refresh the page to retry.\n"+error.message,true);
     }
     renderBar();
+    renderPhotoQueue();
 }
 initialize();
 setInterval(refresh,2500);

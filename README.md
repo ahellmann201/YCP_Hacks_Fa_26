@@ -43,15 +43,30 @@ Event Wi-Fi may prevent devices from reaching one another. The iPhone hotspot pr
 
 ## Using the scanner
 
-1. Photograph **one tube**.
-2. Add more photos while rotating that same tube.
-3. Tap **Upload and read automatically**.
-4. Check the detected label type and suggested fields.
-5. Correct missing or inaccurate values.
-6. Tap **Confirm and save**.
-7. Download the CSV or tap **Next tube**.
+1. Photograph **one tube at a time**.
+2. Connect the webcam to the computer opening the scanner page, select it, and
+   choose **Start camera**. Allow camera access when prompted.
+3. Hold the tube still for each shot and rotate it by hand between shots.
+   Capture several focused, slightly overlapping views if the label wraps
+   around the tube. Use soft, even lighting to reduce glare.
+4. Check the staged thumbnails, download any view you want to send separately,
+   remove any poor views, and choose **Upload sample**. You can also add
+   existing photos before uploading. After upload, download originals from
+   **View original photos** on the sample card.
+5. Check the detected label type and suggested fields.
+6. Correct missing or inaccurate values.
+7. Tap **Confirm and save**.
+8. Download the CSV or tap **Next tube**.
 
 Limits: **8 photos per upload, 10 MB per photo**. Supported formats: JPG, PNG, and WebP.
+Camera captures are full-frame JPEGs at the webcam's preview resolution
+(requested up to 1280×720). All views are sent together through Andrew's
+existing upload endpoint and kept as original photos for review.
+
+Webcam preview requires a secure browser context: open the scanner over HTTPS
+or from `localhost`. The current plain-HTTP Pi address does not grant webcam
+access; use **Add existing photos** there unless the page is available through
+HTTPS.
 
 On iPhone, if photos arrive as unsupported HEIC files, select:
 
@@ -91,7 +106,7 @@ Use the app record ID to reopen a saved upload.
 |---|---|
 | `main.py` | FastAPI server, uploads, saved records, CSV export |
 | `scanner_auto.py` | Automatic label detection, alignment, field OCR, barcode and circle recognition |
-| `static/index.html` | Phone interface, camera controls, review form |
+| `static/index.html` | Browser capture interface, photo upload, review form |
 | `ocr_worker.py` | Earlier OCR implementation; not used by the current automatic server |
 | `test_barcode.py` | Standalone barcode test |
 | `test_handwriting.py` | Standalone handwriting OCR test |
