@@ -1,0 +1,19 @@
+{
+  "name": "large",
+  "match": {"has_qr": true},
+  "reference": "large_ref.jpeg",
+  "scale_from": {"code": "qr", "width": 222},
+  "captions": {
+    "equip": [48, 25, 300, 80],
+    "point": [42, 120, 432, 178],
+    "lube": [42, 218, 305, 272],
+    "date": [40, 310, 185, 365]
+  },
+  "fields": {
+    "machine": {"caption": "equip", "box": [305, 0, 1305, 98], "format": "text", "column": "Machine"},
+    "component": {"caption": "point", "box": [435, 98, 1305, 195], "format": "text", "column": "Component"},
+    "lube": {"caption": "lube", "box": [310, 192, 1305, 292], "format": "text", "column": "Refrence Lube"},
+    "date": {"caption": "date", "box": [190, 285, 650, 398], "format": "date", "column": "Date Sampled"}
+  },
+  "choices": {}
+}

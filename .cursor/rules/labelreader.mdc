@@ -1,0 +1,17 @@
+---
+description: Project guidance for the labelreader hackathon project
+alwaysApply: true
+---
+
+# Labelreader project
+
+- This is a Python 3.11+ package. Keep changes consistent with the existing `labelreader/` modules and `pyproject.toml` dependencies.
+- The CLI entry point is `python -m labelreader FOLDER --name BATCH`; optional flags include `--out` and `--truth`.
+- Treat input labels and truth data as potentially sensitive. Do not copy their contents into documentation, logs, or new fixtures unless necessary.
+- OCR uses PyTorch and Transformers and may download models or take substantial time. Prefer focused checks and do not run a full batch unless the user asks.
+- Keep generated files under `out/`; do not commit virtual environments, generated output, or credentials.
+- Preserve the CSV column names and output format expected by the supplied templates and scoring workflow.
+- Treat `templates/small.json` and `templates/large.json` as the source of truth for label geometry, fields, and template-specific behavior; update them rather than hard-coding layout changes in Python.
+- `tests/` is currently empty, and `pyproject.toml` configures no test or lint runner. Do not claim a test suite exists; use focused checks such as `python -m compileall labelreader` when appropriate.
+- Keep the output header compatible with `data/output_empty.csv`, including the existing spelling `Refrence Lube`.
+- Before suggesting a challenge submission, check the official challenge rules and verify the exact required files, scoring metric, and submission deadline rather than assuming them.

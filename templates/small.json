@@ -1,0 +1,24 @@
+{
+  "name": "small",
+  "match": {"has_qr": false},
+  "reference": "small_ref.jpeg",
+  "scale_from": {"code": "barcode", "width": 641},
+  "captions": {
+    "rn": [20, 235, 160, 295],
+    "date": [652, 240, 806, 295],
+    "sn": [15, 385, 150, 440],
+    "ngs": [825, 483, 950, 540]
+  },
+  "fields": {
+    "machine": {"caption": "rn", "box": [270, 225, 655, 320], "format": "digits", "prefix": "UP ", "column": "Machine"},
+    "date": {"caption": "date", "box": [800, 215, 1070, 320], "format": "date", "column": "Date Sampled"},
+    "serial": {"caption": "sn", "box": [150, 345, 1070, 462], "format": "serial", "column": "Serial Number"}
+  },
+  "choices": {
+    "position": {"caption": "ngs", "outer": [74, 90], "inner": [40, 56], "options": {
+      "1": [132, 512], "2": [205, 512], "3": [283, 512], "4": [360, 512], "5": [434, 512], "6": [511, 512]}},
+    "side": {"caption": "ngs", "outer": [170, 96], "inner": [112, 56], "options": {
+      "GS": [718, 512], "NGS": [888, 512]}}
+  },
+  "component": "{position} {side}"
+}

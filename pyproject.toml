@@ -1,0 +1,9 @@
+[project]
+name = "labelreader"
+version = "0.1.0"
+description = "Reads MRG Labs sample labels into a reviewable CSV"
+requires-python = ">=3.11"
+dependencies = ["opencv-python-headless", "numpy", "pillow", "zxing-cpp", "torch", "transformers"]
+
+[tool.setuptools]
+packages = ["labelreader"]
