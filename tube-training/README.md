@@ -75,4 +75,4 @@ The local dataset contained 38 tube folders / 114 photos, with 67 training and 9
 .\.venv-train\Scripts\python.exe -m unittest -v test_dataset test_draft_labels test_date_formats test_annotation_server
 ```
 
-Deployment still requires exporting/converting to ONNX, checking predictions after conversion, and measuring memory/latency on the Pi 3. The existing app retains its barcode, label detection/cropping and review functions. No automatic-cropping or circled-selection model is trained here.
+The converted model and CPU parity results are now available in [trained-model/tube_rec](../trained-model/tube_rec/README.md), with conversion and standalone inference helpers in this folder. Measuring memory/latency on the Pi 3 and app integration remain to be done. The existing app retains its barcode, label detection/cropping and review functions. No automatic-cropping or circled-selection model is trained here.

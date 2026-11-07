@@ -1,0 +1,5 @@
+# Separate Windows CPU conversion environment; keep GPU training environment intact.
+paddlepaddle==3.1.1
+paddle2onnx==2.1.0
+onnx==1.17.0
+setuptools
