@@ -1,0 +1,13 @@
+
+# Python environments and cache
+.venv/
+.venv-ocr/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+
+# Sample photos and generated files
+uploads/
+test-crops/
+models/

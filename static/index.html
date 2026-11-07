@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sample Scanner</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        font: 17px Arial, sans-serif;
+        background: #f3f5f8;
+        color: #172334;
+        max-width: 800px;
+        margin: 24px auto;
+        padding: 0 16px;
+    }
+
+    section {
+        background: white;
+        padding: 22px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+
+    h1, h2 {
+        margin-top: 0;
+    }
+
+    button, input, select {
+        font: inherit;
+    }
+
+    button, .button {
+        display: inline-block;
+        padding: 12px 16px;
+        margin: 6px 4px 6px 0;
+        border: 1px solid #bcc7d5;
+        border-radius: 7px;
+        cursor: pointer;
+        background: #eef2f7;
+        color: #172334;
+        text-decoration: none;
+    }
+
+    button:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+
+    .primary {
+        background: #1763c6;
+        border-color: #1763c6;
+        color: white;
+    }
+
+    .field {
+        display: block;
+        width: 100%;
+        padding: 12px;
+        margin: 7px 0;
+        border: 1px solid #aeb8c6;
+        border-radius: 6px;
+        background: white;
+        color: #172334;
+    }
+
+    .field:focus {
+        outline: 3px solid #b5d4ff;
+        outline-offset: 2px;
+    }
+
+    .field.needs-review {
+        border: 3px solid #dc2626 !important;
+        background: #fff1f2 !important;
+        box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+    }
+
+    .field.needs-review:focus {
+        outline-color: #f4baba;
+    }
+
+    .field[readonly] {
+        background: #f1f3f6;
+        color: #5d6877;
+    }
+
+    .field::placeholder {
+        color: #687587;
+        opacity: 1;
+    }
+
+    .field-group {
+        margin-bottom: 19px;
+    }
+
+    .field-message {
+        margin: 5px 0 0;
+        font-size: 14px;
+        color: #b02020;
+    }
+
+    .hint {
+        font-size: 14px;
+        color: #526173;
+    }
+
+    .status {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    .notice {
+        background: #fff4df;
+        border-left: 4px solid #b77200;
+        padding: 12px;
+        border-radius: 4px;
+    }
+
+    .success {
+        background: #eaf7ed;
+        border-left: 4px solid #258041;
+        padding: 12px;
+        border-radius: 4px;
+    }
+
+    .label-badge {
+        display: inline-block;
+        padding: 7px 12px;
+        background: #eaf1fc;
+        border-radius: 6px;
+    }
+
+    #previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    figure {
+        margin: 10px 0;
+        width: 140px;
+    }
+
+    figure img {
+        width: 140px;
+        height: 120px;
+        object-fit: contain;
+        border-radius: 6px;
+        background: #eee;
+    }
+
+    figure button {
+        padding: 7px 10px;
+        font-size: 14px;
+    }
+
+    .saved-photo {
+        display: block;
+        width: 100%;
+        max-width: 600px;
+        height: auto;
+        margin-bottom: 20px;
+        border-radius: 6px;
+    }
+
+    details {
+        margin-top: 18px;
+    }
+
+    summary {
+        cursor: pointer;
+        padding: 10px 0;
+    }
+
+    [hidden] {
+        display: none !important;
+    }
+</style>
+</head>
+
+<body>
+<h1>Sample Scanner</h1>
+
+<section id="capture">
+    <h2>Photograph one tube</h2>
+
+    <p id="prompt"></p>
+
+    <p>
+        Keep the label and barcode visible.
+        Use a plain background and avoid glare.
+    </p>
+
+    <p class="hint">
+        Up to 8 JPG, PNG, or WebP photos. Maximum 10 MB each.
+    </p>
+
+    <input
+        id="camera"
+        type="file"
+        accept="image/jpeg,image/png"
+        capture="environment"
+        hidden
+    >
+
+    <input
+        id="library"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        hidden
+    >
+
+    <button id="take" type="button">Take photo</button>
+
+    <button id="add" type="button">
+        Add from library / files
+    </button>
+
+    <p id="count"></p>
+
+    <div id="previews"></div>
+
+    <button id="upload" class="primary" type="button">
+        Upload and read automatically
+    </button>
+
+    <button id="clear" type="button">Clear photos</button>
+</section>
+
+<section id="review" hidden>
+    <h2>Review sample</h2>
+
+    <p id="label-badge" class="label-badge"></p>
+
+    <p id="review-notice" class="notice" role="status" hidden></p>
+
+    <p>
+        Check all suggested values before saving.
+        Red outlines mark missing, invalid, or conflicting fields.
+    </p>
+
+    <form id="review-form" novalidate>
+        <div id="fields"></div>
+
+        <button id="save" class="primary" type="submit">
+            Confirm and save
+        </button>
+    </form>
+
+    <a id="csv" class="button" hidden>Download CSV</a>
+
+    <button id="next" type="button">Next tube</button>
+
+    <details id="photos-details">
+        <summary>View original photos</summary>
+        <div id="originals"></div>
+    </details>
+
+    <details>
+        <summary>More options</summary>
+
+        <p id="record-label" class="status hint"></p>
+
+        <label for="label-type">Label type</label>
+
+        <select id="label-type" class="field">
+            <option value="unknown">Not recognized</option>
+            <option value="small">Small</option>
+            <option value="large">Large</option>
+        </select>
+
+        <p class="hint">
+            Only change this if automatic detection chose the wrong type.
+            Changing it does not rerun field mapping.
+        </p>
+
+        <button id="read" type="button">
+            Read photos again
+        </button>
+    </details>
+</section>
+
+<p id="status" class="status" role="status" aria-live="polite"></p>
+
+<section>
+    <h2>Reopen a sample</h2>
+
+    <form id="open-form">
+        <label for="record-id">App record ID</label>
+
+        <input
+            id="record-id"
+            class="field"
+            pattern="[0-9a-f]{32}"
+            required
+        >
+
+        <button id="open" type="submit">Open sample</button>
+    </form>
+</section>
+
+<script>
+const $ = selector => document.querySelector(selector);
+
+const definitions = [
+    ["sample_id", "Sample ID"],
+    ["date_sampled", "Date Sampled"],
+    ["date_received", "Date Received"],
+    ["machine", "Machine"],
+    ["component", "Component"],
+    ["serial_number", "Serial Number"],
+    ["reference_lube", "Reference Lube"]
+];
+
+const inputs = {};
+const fieldMessages = {};
+
+let photos = [];
+let recordId = null;
+let data = null;
+let busy = false;
+let dirty = false;
+
+let touched = new Set();
+let conflicting = new Set();
+
+
+function today() {
+    const date = new Date();
+
+    const local = new Date(
+        date.getTime() - date.getTimezoneOffset() * 60000
+    );
+
+    return local.toISOString().slice(0, 10);
+}
+
+
+function say(text, success = false) {
+    $("#status").textContent = text;
+
+    $("#status").classList.toggle(
+        "success",
+        success && Boolean(text)
+    );
+}
+
+
+function remember(id) {
+    try {
+        if (id) {
+            localStorage.setItem("scanner-auto-record", id);
+        } else {
+            localStorage.removeItem("scanner-auto-record");
+        }
+    } catch (_) {}
+}
+
+
+function isWrittenDate(value) {
+    const match = value.trim().match(
+        /^(\d{2})\/(\d{2})\/(\d{4})$/
+    );
+
+    if (!match) return false;
+
+    const month = Number(match[1]);
+    const day = Number(match[2]);
+    const year = Number(match[3]);
+
+    const date = new Date(
+        Date.UTC(year, month - 1, day)
+    );
+
+    return (
+        date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day
+    );
+}
+
+
+function isISODate(value) {
+    const match = value.match(
+        /^(\d{4})-(\d{2})-(\d{2})$/
+    );
+
+    if (!match) return false;
+
+    return isWrittenDate(
+        `${match[2]}/${match[3]}/${match[1]}`
+    );
+}
+
+
+function formatWrittenDate(value) {
+    const match = value.trim().match(
+        /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/
+    );
+
+    if (!match) return value;
+
+    return (
+        `${match[1].padStart(2, "0")}/` +
+        `${match[2].padStart(2, "0")}/` +
+        match[3]
+    );
+}
+
+
+function requiredFields() {
+    const names = [
+        "sample_id",
+        "date_sampled",
+        "date_received",
+        "machine",
+        "component"
+    ];
+
+    const type = $("#label-type").value;
+
+    if (type === "small") names.push("serial_number");
+    if (type === "large") names.push("reference_lube");
+
+    return names;
+}
+
+
+function fieldProblem(name) {
+    const type = $("#label-type").value;
+    const value = inputs[name].value.trim();
+
+    if (name === "serial_number" && type === "large") {
+        return "";
+    }
+
+    if (name === "reference_lube" && type === "small") {
+        return "";
+    }
+
+    if (!value && requiredFields().includes(name)) {
+        if (name === "date_sampled") {
+            return "Check the date on the label. Enter mm/dd/yyyy.";
+        }
+
+        if (name === "component" && type === "small") {
+            return "Check the circled number and GS/NGS. Example: 4 GS";
+        }
+
+        return "Check this value on the label.";
+    }
+
+    if (
+        name === "date_sampled" &&
+        value &&
+        !isWrittenDate(value)
+    ) {
+        return "Use mm/dd/yyyy. Example: 09/28/2026";
+    }
+
+    if (
+        name === "date_received" &&
+        value &&
+        !isISODate(value)
+    ) {
+        return "Enter a valid received date.";
+    }
+
+    if (
+        name === "component" &&
+        type === "small" &&
+        value &&
+        !/^[1-6] (GS|NGS)$/.test(value)
+    ) {
+        return "Use the circled number and GS/NGS. Example: 4 GS";
+    }
+
+    if (conflicting.has(name) && !touched.has(name)) {
+        return "Photos produced different readings. Confirm the correct value.";
+    }
+
+    return "";
+}
+
+
+function refreshFieldStates() {
+    let count = 0;
+
+    definitions.forEach(([name]) => {
+        const problem = data ? fieldProblem(name) : "";
+        const invalid = Boolean(problem);
+
+        inputs[name].classList.toggle(
+            "needs-review",
+            invalid
+        );
+
+        inputs[name].setAttribute(
+            "aria-invalid",
+            invalid ? "true" : "false"
+        );
+
+        fieldMessages[name].textContent = problem;
+
+        if (invalid) count++;
+    });
+
+    const unknown = (
+        data && $("#label-type").value === "unknown"
+    );
+
+    const notice = $("#review-notice");
+
+    notice.hidden = !data || (!count && !unknown);
+
+    if (unknown) {
+        notice.textContent =
+            "The label type could not be recognized. " +
+            "Check the original photos and confirm Small or Large " +
+            "under More options.";
+    } else if (count) {
+        notice.textContent =
+            `${count} field${count === 1 ? "" : "s"} ` +
+            "need attention. Check the red outlines.";
+    } else {
+        notice.textContent = "";
+    }
+}
+
+
+definitions.forEach(([name, title]) => {
+    const wrapper = document.createElement("div");
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    const hint = document.createElement("p");
+
+    wrapper.className = "field-group";
+
+    label.textContent = title;
+    label.htmlFor = `field-${name}`;
+
+    input.id = `field-${name}`;
+    input.className = "field";
+    input.maxLength = name === "date_received" ? 10 : 200;
+    input.type = name === "date_received" ? "date" : "text";
+
+    input.setAttribute(
+        "aria-describedby",
+        `message-${name}`
+    );
+
+    if (name === "date_sampled") {
+        input.placeholder = "mm/dd/yyyy";
+        input.autocomplete = "off";
+        input.maxLength = 10;
+    }
+
+    if (name === "component") {
+        input.placeholder = "Small example: 4 GS";
+    }
+
+    if (name === "serial_number") {
+        input.autocapitalize = "characters";
+        input.spellcheck = false;
+    }
+
+    hint.id = `message-${name}`;
+    hint.className = "field-message";
+
+    input.addEventListener("input", () => {
+        if (name === "serial_number") {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+
+            input.value = input.value.toUpperCase();
+
+            if (start !== null && end !== null) {
+                input.setSelectionRange(start, end);
+            }
+        }
+
+        touched.add(name);
+        dirty = true;
+        $("#csv").hidden = true;
+
+        refreshFieldStates();
+    });
+
+    if (name === "date_sampled") {
+        input.addEventListener("blur", () => {
+            input.value = formatWrittenDate(input.value);
+            refreshFieldStates();
+        });
+    }
+
+    wrapper.append(label, input, hint);
+    $("#fields").append(wrapper);
+
+    inputs[name] = input;
+    fieldMessages[name] = hint;
+});
+
+
+function update() {
+    $("#capture").hidden = Boolean(recordId);
+    $("#review").hidden = !recordId;
+
+    $("#take").disabled = busy || photos.length >= 8;
+    $("#add").disabled = busy || photos.length >= 8;
+    $("#upload").disabled = busy || !photos.length;
+    $("#clear").disabled = busy || !photos.length;
+
+    $("#open").disabled = busy;
+    $("#record-id").disabled = busy;
+    $("#read").disabled = busy || !data;
+    $("#save").disabled = busy || !data;
+    $("#next").disabled = busy;
+    $("#label-type").disabled = busy;
+
+    $("#camera").disabled = busy;
+    $("#library").disabled = busy;
+
+    Object.values(inputs).forEach(input => {
+        input.disabled = busy || !data;
+    });
+
+    const type = $("#label-type").value;
+
+    inputs.serial_number.readOnly = type === "large";
+    inputs.reference_lube.readOnly = type === "small";
+
+    inputs.serial_number.placeholder = type === "large"
+        ? "Not used for Large labels"
+        : "";
+
+    inputs.reference_lube.placeholder = type === "small"
+        ? "Not used for Small labels"
+        : "";
+
+    $("#label-badge").textContent = type === "small"
+        ? "Small label"
+        : type === "large"
+            ? "Large label"
+            : "Label type needs review";
+
+    $("#previews").querySelectorAll("button").forEach(button => {
+        button.disabled = busy;
+    });
+
+    $("#take").textContent = photos.length
+        ? "Take another photo"
+        : "Take photo";
+
+    $("#count").textContent =
+        `${photos.length} of 8 photos selected.`;
+
+    $("#prompt").textContent = photos.length
+        ? "Rotate the same tube to reveal the remaining text. " +
+          "Overlap some text from your previous photo."
+        : "Start with the label facing the camera. " +
+          "Keep text sharp and the barcode visible.";
+
+    refreshFieldStates();
+}
+
+
+function setBusy(value) {
+    busy = value;
+    update();
+}
+
+
+async function api(url, options = {}) {
+    const response = await fetch(url, {
+        ...options,
+        cache: "no-store"
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(
+            typeof result.detail === "string"
+                ? result.detail
+                : `Request failed (${response.status}).`
+        );
+    }
+
+    return result;
+}
+
+
+function renderPreviews() {
+    $("#previews").replaceChildren();
+
+    photos.forEach((photo, index) => {
+        const figure = document.createElement("figure");
+        const image = document.createElement("img");
+        const remove = document.createElement("button");
+
+        image.src = photo.url;
+        image.alt = `Photo ${index + 1}`;
+
+        remove.type = "button";
+        remove.textContent = `Remove ${index + 1}`;
+
+        remove.onclick = () => {
+            if (busy) return;
+
+            URL.revokeObjectURL(photo.url);
+            photos.splice(index, 1);
+
+            renderPreviews();
+        };
+
+        figure.append(image, remove);
+        $("#previews").append(figure);
+    });
+
+    update();
+}
+
+
+function clearPhotos() {
+    photos.forEach(photo => URL.revokeObjectURL(photo.url));
+    photos = [];
+    renderPreviews();
+}
+
+
+function addPhotos(fileList) {
+    if (busy || recordId) return;
+
+    const files = Array.from(fileList);
+
+    if (!files.length) return;
+
+    if (photos.length + files.length > 8) {
+        say("Maximum 8 photos per tube.");
+        return;
+    }
+
+    const types = [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    ];
+
+    for (const file of files) {
+        if (!types.includes(file.type)) {
+            say(
+                "Use JPG, PNG, or WebP. For HEIC, change iPhone " +
+                "Settings → Camera → Formats → Most Compatible."
+            );
+            return;
+        }
+
+        if (!file.size || file.size > 10 * 1024 * 1024) {
+            say("Each photo must be nonempty and 10 MB or smaller.");
+            return;
+        }
+    }
+
+    files.forEach(file => {
+        photos.push({
+            file,
+            url: URL.createObjectURL(file)
+        });
+    });
+
+    renderPreviews();
+    say("Photos added. Add another angle or upload and read.");
+}
+
+
+function showCSV() {
+    $("#csv").href = `/samples/${recordId}/csv`;
+    $("#csv").textContent = "Download reviewed CSV";
+    $("#csv").hidden = false;
+}
+
+
+function fillFields(values = {}) {
+    definitions.forEach(([name]) => {
+        let value = String(values[name] || "");
+
+        if (name === "serial_number") {
+            value = value.toUpperCase();
+        }
+
+        if (name === "date_sampled") {
+            value = formatWrittenDate(value);
+        }
+
+        inputs[name].value = value;
+    });
+}
+
+
+function renderOriginals() {
+    $("#originals").replaceChildren();
+
+    if (!data) return;
+
+    data.sample.images.forEach((entry, index) => {
+        const heading = document.createElement("h3");
+        const image = document.createElement("img");
+
+        heading.textContent = `Photo ${index + 1}`;
+
+        image.src = `/samples/${recordId}/images/${index + 1}`;
+        image.className = "saved-photo";
+        image.alt = `Original label photo ${index + 1}`;
+        image.loading = "lazy";
+
+        $("#originals").append(heading, image);
+    });
+}
+
+
+function applyOCR() {
+    const received = (
+        inputs.date_received.value ||
+        data.sample.date_received ||
+        today()
+    );
+
+    fillFields({
+        ...(data.ocr?.suggestions || {}),
+        date_received: received
+    });
+
+    $("#label-type").value =
+        data.ocr?.label_type || "unknown";
+
+    touched = new Set();
+    conflicting = new Set();
+
+    definitions.forEach(([name]) => {
+        const choices =
+            data.ocr?.alternatives?.[name] || [];
+
+        if (choices.length > 1) {
+            conflicting.add(name);
+        }
+    });
+
+    if ($("#label-type").value === "large") {
+        inputs.serial_number.value = "";
+    }
+
+    if ($("#label-type").value === "small") {
+        inputs.reference_lube.value = "";
+    }
+
+    dirty = true;
+    $("#csv").hidden = true;
+
+    renderOriginals();
+    update();
+}
+
+
+async function loadSample(id) {
+    const result = await api(`/samples/${id}`);
+
+    recordId = id;
+    data = result;
+
+    // Clear the previous sample's received date before loading this one.
+    inputs.date_received.value = "";
+
+    $("#record-id").value = id;
+
+    $("#record-label").textContent =
+        `App record ID: ${id}\n` +
+        "This is separate from the printed Sample ID.";
+
+    $("#photos-details").open = false;
+
+    remember(id);
+    applyOCR();
+
+    const saved = result.review;
+
+    if (saved?.fields && "date_received" in saved.fields) {
+        fillFields(saved.fields);
+        $("#label-type").value = saved.label_type;
+
+        touched = new Set(
+            definitions.map(([name]) => name)
+        );
+
+        conflicting = new Set();
+        dirty = false;
+
+        showCSV();
+    }
+
+    update();
+}
+
+
+async function readAutomatically() {
+    say(
+        "Reading automatically on the Pi… " +
+        "Allow a minute or more per photo."
+    );
+
+    const result = await api(
+        `/samples/${recordId}/ocr`,
+        { method: "POST" }
+    );
+
+    data.ocr = result;
+    applyOCR();
+
+    say(
+        "Reading finished. Check the suggested values " +
+        "and correct fields with red outlines."
+    );
+}
+
+
+$("#take").onclick = () => {
+    $("#camera").value = "";
+    $("#camera").click();
+};
+
+
+$("#add").onclick = () => {
+    $("#library").value = "";
+    $("#library").click();
+};
+
+
+["camera", "library"].forEach(id => {
+    $(`#${id}`).onchange = event => {
+        addPhotos(event.target.files);
+        event.target.value = "";
+    };
+});
+
+
+$("#clear").onclick = () => {
+    if (!busy && confirm("Remove selected photos?")) {
+        clearPhotos();
+        say("Photos cleared.");
+    }
+};
+
+
+$("#upload").onclick = async () => {
+    if (busy || !photos.length) return;
+
+    setBusy(true);
+    say("Uploading photos…");
+
+    let savedId = null;
+
+    try {
+        const form = new FormData();
+
+        photos.forEach(photo => {
+            form.append("files", photo.file);
+        });
+
+        form.append("date_received", today());
+
+        const result = await api("/upload", {
+            method: "POST",
+            body: form
+        });
+
+        if (!/^[0-9a-f]{32}$/.test(result.record_id || "")) {
+            throw new Error("Unexpected upload response.");
+        }
+
+        savedId = result.record_id;
+
+        remember(savedId);
+        $("#record-id").value = savedId;
+
+        clearPhotos();
+
+        await loadSample(savedId);
+        await readAutomatically();
+
+    } catch (error) {
+        say(savedId
+            ? `Photos saved as ${savedId}.\n` +
+              `${error.message}\n` +
+              "Reopen this record or use Read photos again " +
+              "under More options."
+            : `${error.message}\n` +
+              "If the connection failed, check uploads before " +
+              "retrying; the sample may already have saved."
+        );
+
+    } finally {
+        setBusy(false);
+    }
+};
+
+
+$("#read").onclick = async () => {
+    if (busy || !data) return;
+
+    if (
+        dirty &&
+        !confirm("Replace current unsaved fields with fresh OCR suggestions?")
+    ) {
+        return;
+    }
+
+    setBusy(true);
+
+    try {
+        await readAutomatically();
+    } catch (error) {
+        say(error.message);
+    } finally {
+        setBusy(false);
+    }
+};
+
+
+$("#label-type").onchange = () => {
+    const type = $("#label-type").value;
+
+    if (type === "small") {
+        inputs.reference_lube.value = "";
+    }
+
+    if (type === "large") {
+        inputs.serial_number.value = "";
+    }
+
+    dirty = true;
+    $("#csv").hidden = true;
+
+    update();
+    say("Label type changed. Check all values before saving.");
+};
+
+
+$("#review-form").onsubmit = async event => {
+    event.preventDefault();
+
+    if (busy || !data) return;
+
+    const type = $("#label-type").value;
+
+    if (!["small", "large"].includes(type)) {
+        say("Confirm Small or Large under More options before saving.");
+        return;
+    }
+
+    inputs.date_sampled.value = formatWrittenDate(
+        inputs.date_sampled.value
+    );
+
+    inputs.serial_number.value =
+        inputs.serial_number.value.toUpperCase();
+
+    refreshFieldStates();
+
+    const values = {};
+
+    definitions.forEach(([name]) => {
+        values[name] = inputs[name].value.trim();
+    });
+
+    if (
+        values.date_sampled &&
+        !isWrittenDate(values.date_sampled)
+    ) {
+        say("Enter Date Sampled as mm/dd/yyyy, such as 09/28/2026.");
+        inputs.date_sampled.focus();
+        return;
+    }
+
+    if (!isISODate(values.date_received)) {
+        say("Enter a valid Date Received.");
+        inputs.date_received.focus();
+        return;
+    }
+
+    if (type === "small") {
+        values.reference_lube = "";
+
+        if (
+            values.component &&
+            !/^[1-6] (GS|NGS)$/.test(values.component)
+        ) {
+            say("Enter Component like 4 GS or 4 NGS.");
+            inputs.component.focus();
+            return;
+        }
+
+    } else {
+        values.serial_number = "";
+    }
+
+    // Ensure the saved value and CSV receive uppercase SN.
+    values.serial_number =
+        values.serial_number.toUpperCase();
+
+    const attention = definitions
+        .map(([name]) => name)
+        .filter(name => fieldProblem(name));
+
+    if (
+        attention.length &&
+        !confirm(
+            "Some fields are blank or need confirmation. " +
+            "Save the current values anyway?"
+        )
+    ) {
+        inputs[attention[0]].focus();
+        return;
+    }
+
+    setBusy(true);
+    say("Saving reviewed sample…");
+
+    try {
+        const result = await api(
+            `/samples/${recordId}/review`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    label_type: type,
+                    fields: values
+                })
+            }
+        );
+
+        data.review = result.review;
+
+        touched = new Set(
+            definitions.map(([name]) => name)
+        );
+
+        conflicting = new Set();
+        dirty = false;
+
+        showCSV();
+        say("Reviewed sample saved. Ready for the next tube.", true);
+
+    } catch (error) {
+        say(`${error.message}\nYour edits are still on this page.`);
+
+    } finally {
+        setBusy(false);
+    }
+};
+
+
+$("#next").onclick = () => {
+    if (busy) return;
+
+    if (dirty && !confirm("Leave without saving current edits?")) {
+        return;
+    }
+
+    recordId = null;
+    data = null;
+    dirty = false;
+
+    touched = new Set();
+    conflicting = new Set();
+
+    remember(null);
+    fillFields({});
+
+    $("#originals").replaceChildren();
+    $("#review-notice").hidden = true;
+    $("#csv").hidden = true;
+    $("#label-type").value = "unknown";
+
+    update();
+    say("Ready for the next tube.");
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+};
+
+
+$("#open-form").onsubmit = async event => {
+    event.preventDefault();
+
+    if (busy) return;
+
+    const id = $("#record-id").value.trim();
+
+    if (!/^[0-9a-f]{32}$/.test(id)) {
+        say("Enter a valid 32-character app record ID.");
+        return;
+    }
+
+    if (
+        (dirty || photos.length) &&
+        !confirm(
+            "Open this sample and discard unsaved edits " +
+            "or selected photos?"
+        )
+    ) {
+        return;
+    }
+
+    setBusy(true);
+
+    try {
+        await loadSample(id);
+        clearPhotos();
+        say("Sample opened.");
+
+    } catch (error) {
+        say(error.message);
+
+    } finally {
+        setBusy(false);
+    }
+};
+
+
+window.addEventListener("beforeunload", event => {
+    if (dirty || busy || photos.length) {
+        event.preventDefault();
+        event.returnValue = "";
+    }
+});
+
+
+try {
+    $("#record-id").value =
+        localStorage.getItem("scanner-auto-record") || "";
+} catch (_) {}
+
+
+update();
+</script>
+</body>
+</html>
