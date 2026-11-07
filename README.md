@@ -405,3 +405,6 @@ Source Control should show repository **sample-scanner** and branch **Andrew**.
 - Dates still require manual correction when recognition fails.
 - Windows deployment has not yet been validated. Pi environment folders cannot be copied to Windows; dependencies must be installed separately.
 - The app is a local-network prototype without authentication or HTTPS.
+## OCR model training
+
+See [tube-training/README.md](tube-training/README.md) for local dataset preparation, GPU training, evaluation, and date formatting. The training tools do not modify the Pi application or install a model automatically.
