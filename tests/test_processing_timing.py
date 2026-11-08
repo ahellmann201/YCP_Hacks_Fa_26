@@ -13,9 +13,9 @@ class TimingTests(unittest.TestCase):
             path = Path(temporary)/'scanner.sqlite3'
             store = QueueStore(path)
             session = store.create('timing test')['id']
-            with patch('background_scanner.time.time', return_value=100):
+            with patch('scanner.queue.background_scanner.time.time', return_value=100):
                 store.register(session, 'a'*32)
-            with patch('background_scanner.time.time', return_value=105):
+            with patch('scanner.queue.background_scanner.time.time', return_value=105):
                 job = store.claim()
             store.complete(job, {'fields':{}, 'label_type':'small'}, [], 12.5)
             store = QueueStore(path)

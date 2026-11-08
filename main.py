@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import hashlib
 import io
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import List, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -23,12 +24,15 @@ from scanner.io.session_store import SessionError
 from scanner.io.zip_import import prepare_archive, ImportError as BatchImportError
 from scanner.reading.sample_dates import normalize_sample_date, sampled_date_issue
 from scanner.io.session_cleanup import empty_uploads
+from access_control import check_access
+from grok_assistant import AssistantRequest, AssistantService, FIELDS
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
 UPLOADS.mkdir(exist_ok=True)
 STORE = QueueStore(BASE / "scanner.sqlite3")
 QUEUE = ScannerQueue(STORE, BASE)
+ASSISTANT = AssistantService(STORE)
 BOOT_ID = uuid4().hex
 
 @asynccontextmanager
@@ -37,13 +41,31 @@ async def lifespan(app):
     STORE.close_after_upload_reset()
     logging.info("Cleared %s upload entries on startup", removed)
     QUEUE.start()
+    assistant_maintenance = asyncio.create_task(ASSISTANT.maintenance())
     try:
         yield
     finally:
+        assistant_maintenance.cancel()
+        try:
+            await assistant_maintenance
+        except asyncio.CancelledError:
+            pass
         QUEUE.stop()
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
+
+@app.middleware("http")
+async def clerk_access(request: Request, call_next):
+    try:
+        check_access(request)
+        if request.method == "POST" and request.url.path.endswith("/assistant"):
+            size = request.headers.get("content-length", "")
+            if not size.isdigit() or int(size) > 16_384:
+                raise HTTPException(413, "Assistant request is too large.")
+    except HTTPException as error:
+        return JSONResponse({"detail": error.detail}, status_code=error.status_code, headers=error.headers)
+    return await call_next(request)
 TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 COLUMNS = [
     ("sample_id", "Sample ID"), ("date_sampled", "Date Sampled"),
@@ -76,6 +98,12 @@ def folder_for(record_id):
         raise HTTPException(404, "Sample not found.")
     return folder
 
+def member_folder(record_id):
+    membership = STORE.sample(record_id)
+    if not membership or not membership.get("session_id"):
+        raise HTTPException(404, "Sample not found.")
+    return folder_for(record_id), membership
+
 def valid_received(value):
     try:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
@@ -102,6 +130,9 @@ class Review(BaseModel):
     label_type: Literal["small", "large", "unknown"]
     confirmed: bool = False
     fields: Fields
+    expected_revision: int | None = None
+    suggestion_request_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    suggestion_field: str | None = None
 
 
 class FinishExport(BaseModel):
@@ -115,7 +146,10 @@ def home():
 
 @app.get("/app")
 def app_info():
-    return {"boot_id": BOOT_ID}
+    import os
+    enabled = os.getenv("ASSISTANT_ENABLED", "").lower() in {"1","true","yes"} and bool(os.getenv("XAI_API_KEY"))
+    return {"boot_id": BOOT_ID, "assistant_available": enabled,
+            "assistant_image_available": enabled and os.getenv("ASSISTANT_IMAGE_ENABLED", "").lower() in {"1","true","yes"}}
 
 @app.post("/sessions")
 def create_session(value: NewSession):
@@ -158,8 +192,12 @@ def csv_bytes(reviews):
     writer = csv.writer(output)
     writer.writerow([title for _, title in COLUMNS])
     for review in reviews:
-        writer.writerow([review['fields'].get(key, '') for key, _ in COLUMNS])
+        writer.writerow([csv_safe(review['fields'].get(key, '')) for key, _ in COLUMNS])
     return output.getvalue().encode('utf-8-sig')
+
+def csv_safe(value):
+    value = str(value or '')
+    return "'" + value if value.lstrip().startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n')) else value
 
 
 @app.post('/sessions/{session_id}/finish-export')
@@ -176,7 +214,7 @@ def finish_export(session_id: str, request: FinishExport):
 
 @app.get("/samples/{record_id}/images/{number}")
 def original_image(record_id: str, number: int):
-    folder = folder_for(record_id)
+    folder, _ = member_folder(record_id)
     sample = json.loads((folder / "sample.json").read_text(encoding="utf-8"))
     images = sample["images"]
     if not 1 <= number <= len(images):
@@ -191,8 +229,7 @@ def original_image(record_id: str, number: int):
 
 @app.get("/samples/{record_id}/evidence")
 def combined_image(record_id: str):
-    folder = folder_for(record_id)
-    membership = STORE.sample(record_id)
+    folder, membership = member_folder(record_id)
     review = membership["review"] if membership else None
     evidence = (review or {}).get("evidence") or {}
     run_id = evidence.get("run_id", "")
@@ -206,10 +243,12 @@ def combined_image(record_id: str):
 
 @app.get('/samples/{record_id}/fields/{field}')
 def field_image(record_id: str, field: str):
+    return FileResponse(field_path(record_id, field))
+
+def field_path(record_id: str, field: str):
     if field not in {'sample_id', 'machine', 'date_sampled', 'component', 'serial_number', 'reference_lube'}:
         raise HTTPException(404, 'Field crop unavailable.')
-    folder = folder_for(record_id)
-    membership = STORE.sample(record_id)
+    folder, membership = member_folder(record_id)
     review = (membership or {}).get('review') or {}
     evidence = review.get('evidence') or {}
     run = evidence.get('run_id', '')
@@ -235,14 +274,20 @@ def field_image(record_id: str, field: str):
                      if (root/f'photo_{number}_{key}.jpg').is_file()), path)
     if not path.is_file():
         raise HTTPException(404, 'Field crop unavailable. Check original photos.')
-    return FileResponse(path)
+    return path
+
+@app.post("/sessions/{session_id}/samples/{record_id}/assistant")
+async def ask_assistant(session_id: str, record_id: str, request: AssistantRequest, connection: Request):
+    crop = field_path(record_id, request.field) if request.action == "read" and request.field != "date_received" else None
+    return await ASSISTANT.run(session_id, record_id, request, crop, connection.client.host if connection.client else "unknown")
 
 @app.post("/samples/{record_id}/review")
 def edit_review(record_id: str, request: Review):
     folder = folder_for(record_id)
+    submitted_fields = request.fields.model_dump()
     fields = {
         key: value.strip()
-        for key, value in request.fields.model_dump().items()
+        for key, value in submitted_fields.items()
     }
     fields["serial_number"] = fields["serial_number"].upper()
     fields['date_sampled'] = normalize_sample_date(fields['date_sampled'])
@@ -264,9 +309,15 @@ def edit_review(record_id: str, request: Review):
             if not re.fullmatch(r"[1-6] (?:GS|NGS)", fields["component"]):
                 raise HTTPException(400, "Component must look like 4 GS.")
 
+    suggestion = None
+    if request.suggestion_request_id:
+        if not request.suggestion_field or request.suggestion_field not in FIELDS or request.expected_revision is None or request.confirmed:
+            raise HTTPException(400, "Suggestion must be applied to an unconfirmed review.")
+        suggestion = ASSISTANT.suggestion(request.session_id, record_id, request.suggestion_request_id,
+            request.suggestion_field, request.expected_revision, submitted_fields[request.suggestion_field])
     review = STORE.edit(
         request.session_id, record_id, fields,
-        request.label_type, request.confirmed,
+        request.label_type, request.confirmed, request.expected_revision, suggestion,
     )
     try:
         QUEUE.snapshot(folder / "review.json", review)

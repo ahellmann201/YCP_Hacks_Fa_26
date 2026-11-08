@@ -1,6 +1,6 @@
 # Offline Sample Scanner
 
-Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. Current demo updates are on **`training`**. The usual demo machine is the Pi. The same server can run from the Dell checkout: [Run on the Dell](#run-on-the-dell).
+Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. The same server can run from the Dell checkout: [Run on the Dell](#run-on-the-dell). Optional Grok review help is described in [ASSISTANT.md](ASSISTANT.md).
 
 ## Quick demo: Pi already running
 
@@ -11,13 +11,13 @@ cd ~/sample-scanner
 bash start-scanner.sh
 ```
 
-`start-scanner.sh` stays next to this README. It starts the app with **three OCR threads** and prints its addresses. Keep the terminal open. The equivalent direct command is:
+Set `SCANNER_ACCESS_PASSWORD` first (see [assistant and authentication setup](ASSISTANT.md)). `start-scanner.sh` stays next to this README. It starts the app with **three OCR threads**. Keep the terminal open. The equivalent direct command is:
 
 ```bash
-SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-1. **Open the page:** visit `http://PI_ADDRESS:8000` from the phone/Dell. Use `hostname -I` to find current addresses. The hotspot previously assigned `172.20.10.2`; configured direct Dell Ethernet uses `192.168.50.2`. Use a network the viewing device can reach. **Do not browse to `0.0.0.0`.**
+1. **Open the page:** use `http://127.0.0.1:8000` on the Pi, or the configured HTTPS reverse-proxy address from a phone/Dell. Log in as `clerk` with `SCANNER_ACCESS_PASSWORD`. The hotspot previously assigned `172.20.10.2`; configured direct Dell Ethernet uses `192.168.50.2`, but these are not direct HTTP login addresses under the new default configuration.
 2. **Choose a session:** the page starts a new session. Uploaded photos are deleted each time the server starts, so download a CSV before stopping if you still need the pictures. Field text already saved in SQLite stays in the database.
 3. **Upload samples:** select 1–8 JPG/PNG/WebP photos of **one tube**, or **one ZIP** containing a folder per tube. For a short demo, use 3–5 clear tubes; use 10–20 for a longer batch. Do not mix ZIPs and loose photos.
 4. **Review as results arrive:** ready cards appear above the processing list. Flagged fields have matching crops; other fields and all originals are expandable. Correct OCR values and select **All good — include in CSV**. Confirmed cards disappear. Populated/high-confidence fields can still be wrong.
@@ -41,7 +41,7 @@ Limits: **100 tubes per ZIP**, **250 MiB archive**, **512 MiB uncompressed photo
 
 ## Run on the Dell
 
-Use this when the demo should run on the laptop instead of the Pi. It is the same site and the same OCR. The laptop keeps its own `uploads/` folder and `scanner.sqlite3`, so Pi sessions do not appear here, and starting this server does not clear the Pi. On the Pi, run `start-scanner.sh`. On the Dell, after the one-time setup below, double-click `Start Scanner.bat` in this folder. Both launchers stay next to this README. Do not copy this Windows `.venv-ocr` onto the Pi.
+Use this when the demo should run on the laptop instead of the Pi. It is the same site and the same OCR. The laptop keeps its own `uploads/` folder and `scanner.sqlite3`, so Pi sessions do not appear here, and starting this server does not clear the Pi. On the Pi, run `start-scanner.sh`. On the Dell, after the one-time setup below, set `SCANNER_ACCESS_PASSWORD` in the process environment and double-click `Start Scanner.bat` in this folder. Both launchers stay next to this README. Do not copy this Windows `.venv-ocr` onto the Pi.
 
 Page behavior matches the Pi demo above: one tube or one ZIP, review, CSV, and **Ctrl+C** to stop. Starting the server empties this checkout’s `uploads/`. Download a CSV first if those photos are still needed. The RTX 3060 is for training. This server reads labels on the CPU.
 
@@ -63,11 +63,11 @@ py -3 -m venv .venv-ocr
 ```powershell
 cd C:\Hackathons\YCP_Hack_Fa_26\YCP_Hacks_Fa_26
 $env:SCANNER_OCR_THREADS = "3"
-.\.venv-ocr\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+.\.venv-ocr\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 1. **On the laptop:** open `http://127.0.0.1:8000`. Do not browse to `0.0.0.0`.
-2. **On the phone:** the phone has to reach the laptop. Run `ipconfig` and use the laptop address on the network the phone is actually joined to, for example `http://192.168.50.1:8000` only when the phone is on that same Ethernet link. Campus Wi-Fi cannot see the direct Dell–Pi address `192.168.50.1`. A phone hotspot works when the laptop is connected to that hotspot. **Take photo** uses the phone camera against whichever address opened the page.
+2. **On the phone:** use a configured HTTPS reverse proxy to the laptop's loopback port. The phone must reach that proxy and trust its certificate. **Take photo** uses the phone camera against the HTTPS address that opened the page.
 3. **Stop:** **Ctrl+C** in the PowerShell window. Closing the browser does not delete photos. The next start does.
 
 ## Cold start: the Pi was powered off
@@ -102,7 +102,7 @@ This is a normal restart, **not a reinstall**. Keep the existing environment and
 
    Use the exact scanned SSID. It has appeared as `AndrewsiPhone` and previously with an apostrophe. Event Wi-Fi may isolate devices. Internet is needed for installation/updates, not a prepared offline scan.
 
-5. Run `cd ~/sample-scanner`, then `bash start-scanner.sh`. Open the hotspot-side Pi address on the phone and choose resume/new.
+5. Run `cd ~/sample-scanner`, then `bash start-scanner.sh`. Open the configured HTTPS proxy address on the phone.
 
 ### Direct Ethernet recovery
 
@@ -128,7 +128,7 @@ The demo Pi is a **Pi 3 Model B, 64-bit Debian 13/aarch64, approximately 1 GB RA
 ```bash
 sudo apt update
 sudo apt install -y git python3-venv python3-pip libgomp1
-git clone --branch training https://github.com/ahellmann201/YCP_Hacks_Fa_26.git ~/sample-scanner
+git clone --branch main https://github.com/ahellmann201/YCP_Hacks_Fa_26.git ~/sample-scanner
 cd ~/sample-scanner
 python3 -m venv .venv-ocr
 .venv-ocr/bin/python -m pip install --upgrade pip
@@ -155,7 +155,7 @@ The first command can download the selected RapidOCR PP-OCRv5 mobile models. The
 **4. Check and launch:**
 
 ```bash
-.venv-ocr/bin/python -m py_compile main.py scanner_auto.py background_scanner.py
+.venv-ocr/bin/python -m py_compile main.py scanner/reading/scanner_auto.py scanner/queue/background_scanner.py
 bash start-scanner.sh
 ```
 
@@ -163,7 +163,7 @@ Before presenting, upload one Small and one Large label, inspect crops/originals
 
 ## Updating an existing checkout
 
-Current updates are in **`training`**. `Andrew` is the earlier branch and may still appear on a Pi that received individual file updates.
+Current updates are in **`main`**. Older Pi checkouts may still be on `training` or `Andrew`.
 
 ```bash
 cd ~/sample-scanner
@@ -172,7 +172,7 @@ git branch --show-current
 git fetch origin
 ```
 
-For a **clean checkout already on `training`**, stop the server, run `git pull --ff-only`, then `bash start-scanner.sh`. If there are local edits or individually restored files, save/commit those before switching branches or pulling. Do not hard-reset or delete `uploads/`/`scanner.sqlite3` as an update step. Pushing source code does not back up sample data.
+For a **clean checkout already on `main`**, stop the server, run `git pull --ff-only`, then `bash start-scanner.sh`. If there are local edits or individually restored files, save/commit those before switching branches or pulling. Do not hard-reset or delete `uploads/`/`scanner.sqlite3` as an update step. Pushing source code does not back up sample data.
 
 To synchronize an older mixed Pi checkout in place, stop its server and follow [the backed-up Pi sync procedure](docs/PI_CLEAN_CHECKOUT.md#sync-the-current-pi-folder-in-place). This aligns source to `origin/training`; it does not replay old application changes with a Git rebase.
 
@@ -182,7 +182,7 @@ If VS Code still shows the old root files and many `M`/`A`/`U` markers, use the 
 
 | Symptom | Action |
 |---|---|
-| Phone cannot open the page | Keep the server terminal open. Use `http://` and the current reachable Pi IP; check hotspot connectivity. On the Dell, use the laptop address from [Run on the Dell](#run-on-the-dell), not `192.168.50.2`. |
+| Phone cannot open the page | Keep the server and HTTPS proxy running. Check the proxy address, certificate, allowed origin, and hotspot connectivity. |
 | SSH times out | Check Ethernet link and the `.50.1`/`.50.2` adapter settings above; use the Pi display for recovery. |
 | GitHub hostname cannot resolve | Reconnect Pi Wi-Fi/default route or DNS. Prepared OCR does not need GitHub. |
 | Old controls remain | Refresh/reopen the page after HTML updates. Restart after Python updates. |
@@ -220,6 +220,8 @@ Valid full dates accept `.`, `-` or `/` and display/export as **MM/DD/YYYY**. Tw
 | Reference Lube | Ref Lube | Blank |
 
 ## File layout and developer checks
+
+For optional Grok review help, authentication, privacy, and Pi deployment, see [Grok assistant setup](ASSISTANT.md).
 
 | Location | Purpose |
 |---|---|

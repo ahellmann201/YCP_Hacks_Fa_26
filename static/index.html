@@ -82,6 +82,12 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .confirm { display:block; padding:14px; margin:14px 0 5px; background:var(--metric); }
 .confirm input { width:22px; height:22px; vertical-align:middle; margin-right:8px; }
 .card.confirmed { border:2px solid var(--ok); }
+.assistant { border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:8px; background:var(--focus); }
+.assistant button { font-size:14px; padding:9px 11px; }
+.camera-preview { width:100%; max-height:360px; background:#111; }
+.camera-frame { position:relative; }
+.camera-guide { position:absolute; left:30%; top:18%; width:40%; height:64%; border:3px dashed #fff; pointer-events:none; }
+.camera-guide.ready { border-color:#22c55e; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -135,6 +141,21 @@ summary { cursor:pointer; padding:12px 0; }
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
 </div>
+<section class="card" aria-labelledby="capture-heading">
+    <h2 id="capture-heading">Webcam capture</h2>
+    <p class="muted">Keep the tube steady, avoid glare, and rotate it to show the whole label.</p>
+    <label>Camera<select id="camera-device" class="field"><option value="">Default camera</option></select></label>
+    <button id="start-camera" type="button">Start camera</button>
+    <button id="stop-camera" type="button">Stop camera</button>
+    <div id="camera-frame" class="camera-frame" hidden>
+        <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+        <div id="camera-guide" class="camera-guide" aria-hidden="true"></div>
+    </div>
+    <label><input id="auto-capture" type="checkbox" checked> Auto capture when centered and steady</label>
+    <button id="capture-view" type="button">Capture view</button>
+    <p id="camera-status" class="muted" role="status">Webcam needs HTTPS or localhost.</p>
+    <p class="muted">Captured views join the phone photos above. Use Upload samples when ready.</p>
+</section>
 <section id="review-section" aria-labelledby="review-title">
     <h2 id="review-title">Samples to review</h2>
     <div id="cards"></div>
@@ -167,6 +188,7 @@ const cards = new Map();
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
 const photoQueue = [];
+let assistantAvailable = false, assistantImageAvailable = false;
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -294,6 +316,7 @@ function renderBar() {
     $("#take-iphone-photo").disabled=uploading || finishing || !initialized || photoQueue.length>=8;
     $("#clear-photos").hidden=!photoQueue.length;
     $("#clear-photos").disabled=uploading || finishing;
+    cameraControls();
     const blocked=finishing || writes>0 || [...cards.values()].some(c=>c.saveError || c.dirty);
     if(session) {
         const metrics=session.metrics||{};
@@ -333,6 +356,11 @@ function saveCard(c,confirmed) {
         session_id:sessionId, label_type:c.type.value,
         confirmed, fields:values(c)
     };
+    if(c.suggestion) {
+        payload.expected_revision=c.suggestion.revision;
+        payload.suggestion_request_id=c.suggestion.request_id;
+        payload.suggestion_field=c.suggestion.field;
+    }
     writes++;
     c.operations++;
     c.check.disabled=true;
@@ -343,6 +371,8 @@ function saveCard(c,confirmed) {
         c.saveError=false;
         c.retry.hidden=true;
         session=result.session;
+        c.revision=result.review.revision;
+        c.suggestion=null;
         if(version===c.version) {
             c.dirty=false;
             c.serverConfirmed=confirmed;
@@ -365,9 +395,15 @@ function saveCard(c,confirmed) {
     });
     return c.tail;
 }
-function edited(c) {
+function edited(c, fromSuggestion=false) {
     const wasConfirmed=c.check.checked || c.serverConfirmed;
     c.version++;
+    if(!fromSuggestion) c.suggestion=null;
+    if(c.assistantResult) {
+        c.assistantResult=null;
+        c.assistantOutput.textContent="Review changed. Ask again for a current suggestion.";
+    }
+    c.assistantHistory=[];
     c.dirty=true;
     c.check.checked=false;
     c.serverConfirmed=false;
@@ -376,6 +412,82 @@ function edited(c) {
     fieldStates(c);
     if(wasConfirmed) saveCard(c,false);
     else c.timer=setTimeout(()=>saveCard(c,false),600);
+}
+function addAssistant(c) {
+    const panel=document.createElement("section"); panel.className="assistant";
+    const heading=document.createElement("h3"); heading.textContent="Review assistant";
+    const note=document.createElement("p"); note.className="muted";
+    note.textContent=assistantAvailable
+        ? "Choose a field. Only Ask Grok to read this field sends an image. AI suggestions stay separate from saved values. Check every reading and confirm the sample yourself."
+        : "Cloud assistance is unavailable. Warning and photo help work locally; review and CSV still work.";
+    const field=document.createElement("select"); field.className="field";
+    names.forEach(([key,label])=>field.append(new Option(label,key)));
+    const answer=document.createElement("p"); answer.className="status"; answer.setAttribute("role","status");
+    c.assistantOutput=answer;
+    const question=document.createElement("input"); question.className="field"; question.maxLength=500;
+    question.placeholder="Question about this sample or scanner";
+    const use=document.createElement("button"); use.type="button"; use.textContent="Use suggestion"; use.hidden=true;
+    const button=(label,action)=>{
+        const control=document.createElement("button"); control.type="button"; control.textContent=label;
+        control.onclick=()=>ask(action); return control;
+    };
+    const ask=async(action)=>{
+        const selected=field.value;
+        use.hidden=true; c.assistantResult=null;
+        if(c.dirty || c.operations) { answer.textContent="Wait for edits to save, then ask again."; return; }
+        if(!assistantAvailable) {
+            answer.textContent=action==="photo"
+                ? "Use a steady camera and diffuse light. Avoid glare, rotate the tube to show the whole field, and take another view if text wraps or overlaps."
+                : action==="explain"
+                ? (c.hints[selected]?.textContent || (c.checkReasons?.[selected]||[]).join(" ") || "No warning is recorded for this field. Check the crop and original photo.")
+                : "Cloud assistance is unavailable. Review and export still work.";
+            return;
+        }
+        if(action==="read" && !confirm(`Send the ${selected} field crop for this sample to xAI Grok? This image leaves the device.`)) return;
+        answer.textContent=action==="read"?"Sending this field crop to Grok…":"Asking Grok…";
+        const request_id=crypto.randomUUID().replaceAll("-","");
+        const startSession=sessionId, startVersion=c.version, startRevision=c.revision;
+        try {
+            const result=await api(`/sessions/${startSession}/samples/${c.id}/assistant`,post({action,field:selected,message:question.value,history:action==="followup"?(c.assistantHistory||[]):[],revision:startRevision,request_id,image_consent:action==="read"}));
+            if(sessionId!==startSession || c.version!==startVersion || c.revision!==startRevision || finishing || field.value!==selected) {
+                answer.textContent="Selection or review changed. Ask again."; return;
+            }
+            if(result.proposal) {
+                c.assistantResult={...result,request_id};
+                const value=result.proposal.value;
+                answer.textContent=value===null?"AI suggestion: unreadable. "+result.proposal.explanation:
+                    `AI suggestion for ${selected}: ${value}. ${result.proposal.explanation} Check the crop and original photo.`;
+                use.hidden=value===null || selected==="sample_id";
+            } else {
+                answer.textContent=result.answer||"No answer available.";
+                c.assistantHistory=[...(c.assistantHistory||[]),`Question: ${question.value.slice(0,300)} Answer: ${result.answer.slice(0,280)}`].slice(-4);
+            }
+        } catch(error) { answer.textContent=error.message; }
+    };
+    field.onchange=()=>{
+        c.assistantResult=null; c.assistantHistory=[]; use.hidden=true;
+        readButton.disabled=!assistantImageAvailable || field.value==="date_received";
+        answer.textContent=field.value==="date_received"
+            ? "Date Received is entered by the clerk; there is no label crop to send."
+            : `Selected ${field.selectedOptions[0].text} for this sample.`;
+    };
+    use.onclick=()=>{
+        const result=c.assistantResult;
+        if(!result || result.field!==field.value || result.revision!==c.revision || c.dirty) {
+            answer.textContent="Suggestion is stale. Ask again."; return;
+        }
+        c.inputs[result.field].value=result.proposal.value;
+        c.suggestion={request_id:result.request_id,field:result.field,revision:result.revision};
+        edited(c,true); use.hidden=true;
+        answer.textContent="AI suggestion entered for review. Check it and confirm the sample separately.";
+    };
+    const readButton=button("Ask Grok to read this field","read");
+    readButton.disabled=!assistantImageAvailable;
+    readButton.title=assistantImageAvailable?"Sends only this field crop after you confirm.":"Image assistance is unavailable.";
+    panel.append(heading,note,field,button("Explain this warning","explain"),
+        button("Help me get a clearer photo","photo"),readButton,
+        question,button("Ask question","followup"),answer,use);
+    c.el.append(panel);
 }
 function addCard(job) {
     const review=job.review;
@@ -389,7 +501,7 @@ function addCard(job) {
     if(!review?.fields || cards.has(job.record_id)) return;
     const c={
         id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, blankFields:review.blank_fields||[],
-        ocrValues:review.original_fields||review.fields, version:0,
+        ocrValues:review.original_fields||review.fields, version:0, revision:review.revision||0,
         dirty:false, saveError:false, operations:0,
         serverConfirmed:!!review.confirmed, tail:Promise.resolve(), timer:null
     };
@@ -544,6 +656,7 @@ function addCard(job) {
         attention.append(note);
     }
     c.el.append(c.moreDetails,originals);
+    addAssistant(c);
     if(Object.entries(review.ocr_candidates||{}).some(([key,choices])=>
         c.inputs[key] && !c.inputs[key].value && choices.length===1)) {
         const restore=document.createElement("button");
@@ -800,6 +913,102 @@ async function uploadArchive(file) {
         uploading=false; $("#photos").value=""; renderBar();
     }
 }
+let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false;
+function cameraControls() {
+    $("#capture-view").disabled=!cameraStream || photoQueue.length>=8 || uploading || finishing;
+    $("#stop-camera").disabled=!cameraStream;
+}
+function stopCamera() {
+    if(cameraStream) cameraStream.getTracks().forEach(track=>track.stop());
+    cameraStream=null;
+    $("#camera-preview").srcObject=null;
+    $("#camera-frame").hidden=true;
+    $("#camera-status").textContent="Camera stopped.";
+    cameraControls();
+}
+async function startCamera() {
+    stopCamera();
+    if(!navigator.mediaDevices?.getUserMedia) {
+        $("#camera-status").textContent="Open over HTTPS or localhost for webcam access.";
+        return;
+    }
+    try {
+        cameraStream=await navigator.mediaDevices.getUserMedia({
+            video:{deviceId:$("#camera-device").value?{exact:$("#camera-device").value}:undefined},audio:false
+        });
+        const video=$("#camera-preview");
+        video.srcObject=cameraStream;
+        $("#camera-frame").hidden=false;
+        await video.play();
+        const devices=await navigator.mediaDevices.enumerateDevices();
+        const choice=$("#camera-device"), selected=choice.value;
+        choice.replaceChildren(new Option("Default camera",""));
+        devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>
+            choice.append(new Option(device.label||`Camera ${index+1}`,device.deviceId)));
+        choice.value=selected;
+        $("#camera-status").textContent="Camera ready. Center the label and rotate for another view.";
+        cameraControls();
+    } catch(error) {
+        stopCamera();
+        $("#camera-status").textContent="Could not start camera: "+error.message;
+    }
+}
+function cameraSample() {
+    const video=$("#camera-preview");
+    if(!cameraStream || !video.videoWidth) return null;
+    const canvas=document.createElement("canvas"); canvas.width=160; canvas.height=90;
+    const context=canvas.getContext("2d",{willReadFrequently:true});
+    if(!context) return null;
+    context.drawImage(video,0,0,160,90);
+    const pixels=context.getImageData(0,0,160,90).data, gray=new Uint8Array(160*90);
+    for(let i=0;i<gray.length;i++) gray[i]=(pixels[4*i]*77+pixels[4*i+1]*150+pixels[4*i+2]*29)>>8;
+    return gray;
+}
+function centerDifference(a,b) {
+    let sum=0,count=0;
+    for(let y=14;y<76;y+=2) for(let x=56;x<104;x+=2) { sum+=Math.abs(a[y*160+x]-b[y*160+x]); count++; }
+    return sum/count;
+}
+function labelDetail(gray) {
+    let center=0,sides=0,cn=0,sn=0;
+    for(let y=15;y<75;y+=2) for(let x=20;x<140;x+=2) {
+        const p=y*160+x, edge=Math.abs(gray[p]-gray[p+1])+Math.abs(gray[p]-gray[p+160]);
+        if(x>=56 && x<104) { center+=edge; cn++; }
+        else if(x<48 || x>=112) { sides+=edge; sn++; }
+    }
+    return center/cn>12 && center/cn>sides/sn*1.35;
+}
+async function captureView(automatic=false) {
+    const video=$("#camera-preview");
+    if(!cameraStream || !video.videoWidth || photoQueue.length>=8 || uploading || finishing) return;
+    const canvas=document.createElement("canvas"); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    canvas.getContext("2d").drawImage(video,0,0);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.93));
+    if(blob) addPhonePhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{type:"image/jpeg"})]);
+    cameraControls();
+    if(automatic) $("#camera-status").textContent="View captured. Rotate the tube for the next view.";
+}
+function checkAutoCapture() {
+    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || photoQueue.length>=8 || document.hidden) return;
+    const sample=cameraSample(); if(!sample) return;
+    const detailed=labelDetail(sample), moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
+    autoPrevious=sample;
+    if(!detailed || moving) { autoStableSince=0; $("#camera-guide").classList.remove("ready"); return; }
+    if(autoCaptured && centerDifference(sample,autoCaptured)<5.5) return;
+    if(!autoStableSince) autoStableSince=Date.now();
+    $("#camera-guide").classList.add("ready");
+    if(Date.now()-autoStableSince<1200) return;
+    autoBusy=true;
+    captureView(true).finally(()=>{ autoCaptured=sample; autoStableSince=0; autoBusy=false; });
+}
+$("#start-camera").onclick=startCamera;
+$("#stop-camera").onclick=stopCamera;
+$("#camera-device").onchange=()=>{ if(cameraStream) startCamera(); };
+$("#capture-view").onclick=()=>{ autoCaptured=cameraSample(); captureView(); };
+$("#auto-capture").onchange=()=>{ autoPrevious=null; autoCaptured=null; autoStableSince=0; };
+window.addEventListener("pagehide",stopCamera);
+setInterval(checkAutoCapture,200);
+cameraControls();
 window.addEventListener("beforeunload",event=>{
     if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
@@ -808,7 +1017,8 @@ window.addEventListener("beforeunload",event=>{
 async function initialize() {
     renderBar();
     try {
-        const app=await api("/app"); bootId=app.boot_id;
+        const app=await api("/app"); bootId=app.boot_id; assistantAvailable=!!app.assistant_available;
+        assistantImageAvailable=!!app.assistant_image_available;
         let saved=null;
         try { saved=JSON.parse(sessionStorage.getItem(STORAGE)||"null"); } catch(_) {}
         const unfinished=await api("/sessions");

@@ -42,6 +42,8 @@ class QueueStore(SessionStore):
             if expected != export_hash:
                 raise SessionError('Session changed since the download. Download the current CSV again before clearing.')
             db.execute('UPDATE sessions SET finished_at=COALESCE(finished_at, ?) WHERE id=?', (self.now(), session_id))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='assistant_requests'").fetchone():
+                db.execute("UPDATE assistant_requests SET result_json=NULL, state='finished' WHERE session_id=?", (session_id,))
             return [row['record_id'] for row in rows]
 
     def __init__(self, path):
@@ -110,6 +112,8 @@ class QueueStore(SessionStore):
                 SET finished_at=COALESCE(finished_at, ?)
                 WHERE finished_at IS NULL
             """, (self.now(),))
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='assistant_requests'").fetchone():
+                db.execute("UPDATE assistant_requests SET result_json=NULL, state='finished' WHERE result_json IS NOT NULL OR state='pending'")
 
     def claim(self):
         with self.connection(write=True) as db:
@@ -244,7 +248,8 @@ class QueueStore(SessionStore):
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
-                            "image_count", "evidence", "source_folder", "field_checks", "blank_fields", "ocr_candidates", "original_fields"
+                        "image_count", "evidence", "source_folder", "field_checks", "blank_fields", "ocr_candidates", "original_fields",
+                        "revision", "suggestion_sources"
                         )
                     } if review else None,
                 })
@@ -270,7 +275,7 @@ class QueueStore(SessionStore):
             if review.get("confirmed")
         ]
 
-    def edit(self, session_id, record_id, fields, kind, confirmed):
+    def edit(self, session_id, record_id, fields, kind, confirmed, expected_revision=None, suggestion=None):
         with self.connection(write=True) as db:
             self._active(db, session_id)
             row = db.execute("""
@@ -281,8 +286,19 @@ class QueueStore(SessionStore):
             if row is None or row["state"] != "done" or not row["review_json"]:
                 raise SessionError("This sample is not ready for review.")
             review = json.loads(row["review_json"])
+            if expected_revision is not None and review.get("revision", 0) != expected_revision:
+                raise SessionError("Review changed. Refresh before applying the suggestion.")
+            changed = fields != review.get("fields") or kind != review.get("label_type")
+            if changed and confirmed and review.get("confirmed"):
+                raise SessionError("Changed values need a separate human confirmation.")
+            sources = review.get("suggestion_sources") or {}
+            if changed:
+                sources = {key: value for key, value in sources.items() if fields.get(key) == review.get("fields", {}).get(key)}
+            if suggestion:
+                sources[suggestion["field"]] = {"model": suggestion["model"], "prompt_version": suggestion["prompt_version"], "request_id": suggestion["request_id"]}
             review.update(
                 fields=fields, label_type=kind, confirmed=confirmed,
+                revision=review.get("revision", 0) + 1, suggestion_sources=sources,
                 saved_at=self.now(),
                 reviewed_at=self.now() if confirmed else None,
             )

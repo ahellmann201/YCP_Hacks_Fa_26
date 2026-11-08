@@ -5,7 +5,7 @@
 Start with two threads:
 
 ```bash
-SCANNER_OCR_THREADS=2 .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+SCANNER_OCR_THREADS=2 .venv-ocr/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 Omit the environment setting or use `1` to revert. Restart the server for changes to take effect. Successful OCR JSON results include `ocr_threads` for verifying the active setting. No new dependencies are required.
