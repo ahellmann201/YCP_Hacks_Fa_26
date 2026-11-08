@@ -76,4 +76,6 @@ def large_row_regions(image, template):
         top=(best[index-1][0]+spacing*.12) if index else row[3]-spacing*1.10
         bottom=row[4]+spacing*.20  # Preserve j/g/y descenders below the underline.
         regions[field]=(max(0,left)/width,max(0,top)/height,min(width,right)/width,min(height,bottom)/height)
-    return {'regions':regions,'baselines':[round(row[0],1) for row in best], 'qr_left':qr_left}
+    return {'regions':regions,'baselines':[round(row[0],1) for row in best], 'qr_left':qr_left,
+            'numeric_bottoms':{'machine':min(height,best[0][4]+1),
+                               'date_sampled':min(height,best[3][4]+1)}}

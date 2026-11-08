@@ -621,8 +621,12 @@ def process(job):
                     if detected_rows:
                         template = {**template, 'fields':detected_rows['regions']}
                         entry['row_baselines'] = detected_rows['baselines']
+                        entry['numeric_bottoms'] = detected_rows['numeric_bottoms']
 
                 for field, region in template["fields"].items():
+                    numeric_bottom=entry.get('numeric_bottoms',{}).get(field)
+                    if field=='date_sampled' and numeric_bottom is not None:
+                        region=(*region[:3],min(region[3],numeric_bottom/template['size'][1]))
                     crop = prepare_field_crop(
                         aligned,
                         coverage,
@@ -658,6 +662,28 @@ def process(job):
                     score = field_reader.last_confidence
                     if score is None and scores:
                         score = min(scores)
+                    base=strip_heading(recognized,field,label_type)
+                    if field=='machine' and label_type=='large' and base.isdigit() and numeric_bottom is not None:
+                        numeric_region=(*region[:3],min(region[3],numeric_bottom/template['size'][1]))
+                        numeric_crop=prepare_field_crop(aligned,coverage,template,field,numeric_region,
+                            entry['warnings'],barcode_box=entry.get('barcode_box'))
+                        if numeric_crop is not None:
+                            from crop_adjustments import focus_date_ink
+                            numeric_crop=focus_date_ink(numeric_crop,minimum_width_fraction=.08)
+                            if score is None or score<.95:
+                                numeric_scores=[]
+                                candidate=clean(' '.join(read_text(engine,numeric_crop,line=True,confidence=numeric_scores)))
+                                candidate=strip_heading(candidate,field,label_type)
+                                candidate_score=min(numeric_scores) if numeric_scores else None
+                                entry.setdefault('numeric_attempts',{})[field]=[{'text':base,'score':score},
+                                    {'text':candidate,'score':candidate_score}]
+                                if (candidate.isdigit() and len(candidate)>=len(base) and candidate_score is not None
+                                    and (score is None or candidate_score>=score+.05)):
+                                    if candidate!=base:
+                                        entry['warnings'].append(f'{field}: numeric crop reading changed; verify the complete number.')
+                                    recognized,score=candidate,candidate_score
+                            crop=numeric_crop
+                            save_rgb(output_dir/filename,crop)
                     if os.environ.get('SCANNER_INK_RETRY')=='1' and field in {'machine','date_sampled'} and (score is None or score<.95):
                         from crop_adjustments import thin_heavy_ink, prefer_thinned_reading
                         variant=thin_heavy_ink(crop)

@@ -96,7 +96,10 @@ summary { cursor:pointer; padding:12px 0; }
         Only confirmed tubes enter the CSV.
     </p>
 </div>
-<div id="cards"></div>
+<section id="review-section" aria-labelledby="review-title">
+    <h2 id="review-title">Samples to review</h2>
+    <div id="cards"></div>
+</section>
 <div id="waiting"></div>
 
 <script>
@@ -207,12 +210,23 @@ function fieldStates(c) {
         }
         c.inputs[key].classList.toggle("bad",!!error);
         c.inputs[key].setAttribute("aria-invalid",error?"true":"false");
+        const original=String(c.ocrValues?.[key]??fields[key]).trim();
+        const corrected=key==="date_sampled"?dateText(fields[key])!==dateText(original):fields[key]!==original;
         c.hints[key].textContent=error || (c.checkReasons?.[key]||[])
-            .filter(reason=>!fields[key] || !reason.startsWith("Missing reading")).join(" ") ||
+            .filter(reason=>!fields[key] || !reason.startsWith("Missing reading"))
+            .filter(reason=>!(key==="date_sampled" && (reason.includes("after Date Received") || reason.includes("not a valid calendar date"))))
+            .filter(reason=>!corrected || !/OCR confidence|Uncertain handwriting|OCR certainty|Verify the handwritten date/.test(reason)).join(" ") ||
             ((c.blankFields||[]).includes(key) && !fields[key]?"Detected blank — available here if you need to correct it.":"");
         if(error && c.otherFields?.contains(c.inputs[key])) c.moreDetails.open=true;
     });
     c.el.classList.toggle("confirmed",c.check.checked && !c.dirty && !c.saveError);
+}
+function scrollToReview() {
+    const next=[...$("#cards").children].find(element=>!element.hidden);
+    const target=next||$("#review-section");
+    const toolbar=document.querySelector(".toolbar");
+    const offset=toolbar?toolbar.getBoundingClientRect().height:0;
+    window.scrollTo({top:Math.max(0,target.getBoundingClientRect().top+window.scrollY-offset-12),behavior:"smooth"});
 }
 function renderBar() {
     cards.forEach(c=>{
@@ -277,6 +291,7 @@ function saveCard(c,confirmed) {
             c.check.checked=confirmed;
             c.el.hidden=confirmed;
             c.note.textContent=confirmed?"Confirmed — included in CSV.":"Changes saved. Check All good when ready.";
+            if(confirmed) requestAnimationFrame(scrollToReview);
         }
     }).catch(error=>{
         c.saveError=true;
@@ -315,7 +330,8 @@ function addCard(job) {
     }
     if(!review?.fields || cards.has(job.record_id)) return;
     const c={
-        id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, blankFields:review.blank_fields||[], version:0,
+        id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, blankFields:review.blank_fields||[],
+        ocrValues:review.original_fields||review.fields, version:0,
         dirty:false, saveError:false, operations:0,
         serverConfirmed:!!review.confirmed, tail:Promise.resolve(), timer:null
     };
@@ -513,10 +529,6 @@ function addCard(job) {
                 c.check.checked=false; c.note.textContent=error;
                 fieldStates(c); return;
             }
-            const missing=required(c).filter(key=>!fields[key]);
-            if(missing.length && !confirm(
-                "Some fields are blank. Confirm that these should stay blank?"
-            )) { c.check.checked=false; return; }
         }
         c.version++; c.dirty=true;
         saveCard(c,c.check.checked);

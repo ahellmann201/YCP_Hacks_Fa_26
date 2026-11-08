@@ -59,7 +59,7 @@ def prefer_thinned_reading(original,score,candidate,candidate_score,field,receiv
     return True
 
 
-def focus_date_ink(crop):
+def focus_date_ink(crop,minimum_width_fraction=.35):
     """Tighten evidence around tall date strokes, retaining the original pixels."""
     import cv2
     import numpy as np
@@ -79,7 +79,7 @@ def focus_date_ink(crop):
     components=[c for c in components if c[3]>=tallest*.45]
     left=min(c[0] for c in components);top=min(c[1] for c in components)
     right=max(c[0]+c[2] for c in components);bottom=max(c[1]+c[3] for c in components)
-    if right-left<width*.35 or bottom-top<height*.25:
+    if right-left<width*minimum_width_fraction or bottom-top<height*.25:
         return crop
     padding=max(3,round(height*.07))
     return crop[max(0,top-padding):min(height,bottom+padding),

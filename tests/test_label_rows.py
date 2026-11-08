@@ -25,6 +25,9 @@ class RowTests(unittest.TestCase):
             self.assertLess(abs(actual-expected),4)
         self.assertGreaterEqual(result['regions']['reference_lube'][3]*330,196)
         self.assertLess(result['regions']['reference_lube'][1]*330,145)
+        self.assertLessEqual(result['numeric_bottoms']['machine'],68)
+        self.assertLess(result['numeric_bottoms']['machine'],result['regions']['machine'][3]*330)
+        self.assertLess(result['numeric_bottoms']['date_sampled'],result['regions']['date_sampled'][3]*330)
 
     def test_qr_frame_is_excluded_from_field_right_edge(self):
         image=self.label();cv2.rectangle(image,(900,15),(1090,180),(20,20,20),5)
