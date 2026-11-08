@@ -97,7 +97,7 @@ class QueueStore(SessionStore):
             return job
 
     def complete(self, job, review, notices, processing_seconds=None):
-        review['original_fields'] = dict(review.get('fields', {}))
+        review['original_fields'] = dict(review.get('ocr_fields', review.get('fields', {})))
         timing = None
         if processing_seconds is not None:
             waiting = job.get('queue_seconds')
@@ -189,7 +189,7 @@ class QueueStore(SessionStore):
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
-                            "image_count", "evidence", "source_folder", "field_checks", "blank_fields"
+                            "image_count", "evidence", "source_folder", "field_checks", "blank_fields", "ocr_candidates"
                         )
                     } if review else None,
                 })
@@ -362,17 +362,23 @@ class ScannerQueue:
             for key in ("machine", "component", "serial_number", "reference_lube"):
                 fields[key] = ""
 
+        from reading_quality import guard_readings
+        ocr_fields=dict(fields)
+        fields,candidates,withheld=guard_readings(fields,kind,result,sample['date_received'])
         review = {
             "record_id": record_id, "session_id": job["session_id"],
             "label_type": kind, "saved_at": self.store.now(),
             "confirmed": False, "reviewed_at": None,
             "fields": fields, "raw_suggestions": raw,
+            "ocr_fields": ocr_fields, "ocr_candidates": candidates,
             "image_count": len(names),
             "source_folder": sample.get('source_folder'),
             "blank_fields": result.get('blank_fields',[]),
         }
         from review_checks import field_checks
         review['field_checks'] = field_checks(fields, kind, result)
+        for field,reasons in withheld.items():
+            review['field_checks'].setdefault(field,[]).extend(reasons)
         try:
             from label_preview import build_preview
             review["evidence"] = build_preview(folder, run_id, result, kind)

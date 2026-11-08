@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from ocr_settings import ocr_threads
 from field_text import strip_heading, visually_empty
+from reading_quality import crop_quality
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -669,6 +670,7 @@ def process(job):
                     if score is None and scores:
                         score = min(scores)
                     entry.setdefault('field_scores', {})[field] = score
+                    entry.setdefault('field_quality', {})[field] = crop_quality(crop)
                     recognized = strip_heading(recognized,field,label_type)
                     if (not recognized and entry.get('alignment_method')=='tight_large_label'
                         and not any(w.startswith(field+':') for w in entry['warnings'])

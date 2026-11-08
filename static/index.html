@@ -404,7 +404,14 @@ function addCard(job) {
             edited(c);
         };
         c.inputs[key]=input; c.hints[key]=hint;
-        wrap.append(input,hint); row.append(wrap);
+        wrap.append(input,hint);
+        const candidates=review.ocr_candidates?.[key]||[];
+        if(candidates.length) {
+            const suggestion=document.createElement("p"); suggestion.className="muted";
+            suggestion.textContent="Unverified OCR suggestion: "+candidates.join(" / ");
+            wrap.append(suggestion);
+        }
+        row.append(wrap);
         if(key!=="date_received") {
             const link=document.createElement("a");
             link.href=`/samples/${c.id}/fields/${key}`; link.target="_blank"; link.rel="noopener";
