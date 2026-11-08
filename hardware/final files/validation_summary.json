@@ -1,0 +1,38 @@
+{
+  "00_boltless_fit_test_P1P_PLA": {
+    "objects": {
+      "fit_coupon": 1,
+      "test_peg": 1,
+      "motor_clip": 1,
+      "locking_key": 1
+    },
+    "estimated_seconds": 1513,
+    "filament_g": 4.93,
+    "gcode_md5": "c4133d0f43894ec4f036b36041f061fd",
+    "validated": "P1P/0.4/PLA, separate objects, bed bounds, exclusion area, no supports, G-code checksum"
+  },
+  "01_BASE_WIDE_KEYS_BRIM_P1P_PLA": {
+    "objects": {
+      "base": 1,
+      "foot": 4,
+      "motor_clip": 2,
+      "locking_key": 6
+    },
+    "estimated_seconds": 14929,
+    "filament_g": 84.99,
+    "gcode_md5": "56682f93a684d610784cbe76e9187d0f",
+    "validated": "P1P/0.4/PLA, separate objects, bed bounds, exclusion area, no supports, G-code checksum"
+  },
+  "02_gears_and_washers_P1P_PLA": {
+    "objects": {
+      "socket_gear": 3,
+      "idler": 2,
+      "pinion": 1,
+      "washer": 5
+    },
+    "estimated_seconds": 5705,
+    "filament_g": 34.93,
+    "gcode_md5": "4a091bf1e8460fb2cd3c8b8916a99b96",
+    "validated": "P1P/0.4/PLA, separate objects, bed bounds, exclusion area, no supports, G-code checksum"
+  }
+}
