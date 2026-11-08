@@ -82,6 +82,10 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .confirm { display:block; padding:14px; margin:14px 0 5px; background:var(--metric); }
 .confirm input { width:22px; height:22px; vertical-align:middle; margin-right:8px; }
 .card.confirmed { border:2px solid var(--ok); }
+.camera-preview { width:100%; max-height:360px; background:#111; }
+.camera-frame { position:relative; }
+.camera-guide { position:absolute; left:30%; top:18%; width:40%; height:64%; border:3px dashed #fff; pointer-events:none; }
+.camera-guide.ready { border-color:#22c55e; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -114,6 +118,20 @@ summary { cursor:pointer; padding:12px 0; }
     <button id="clear-photos" class="theme-toggle" type="button" hidden>Clear photos</button>
     <p id="photo-count" class="muted" hidden></p>
     <div id="photo-previews" class="photo-grid"></div>
+    <section id="live-demo" aria-labelledby="capture-heading">
+        <h2 id="capture-heading">Live demo</h2>
+        <p class="muted">Keep the tube steady, avoid glare, and rotate it to show the whole label. Captured views join the photos above.</p>
+        <label>Camera<select id="camera-device" class="field"><option value="">Default camera</option></select></label>
+        <button id="start-camera" type="button">Start camera</button>
+        <button id="stop-camera" type="button">Stop camera</button>
+        <div id="camera-frame" class="camera-frame" hidden>
+            <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+            <div id="camera-guide" class="camera-guide" aria-hidden="true"></div>
+        </div>
+        <label><input id="auto-capture" type="checkbox" checked> Auto capture when centered and steady</label>
+        <button id="capture-view" type="button">Capture view</button>
+        <p id="camera-status" class="muted" role="status">Webcam needs HTTPS or localhost. Take photo still works on the phone.</p>
+    </section>
     <a id="download" class="button" hidden>Download current CSV</a>
     <button id="finish-export" type="button" hidden>Download CSV & finish session</button>
     <label style="display:block;margin:6px 0;font-size:15px;">
@@ -294,6 +312,7 @@ function renderBar() {
     $("#take-iphone-photo").disabled=uploading || finishing || !initialized || photoQueue.length>=8;
     $("#clear-photos").hidden=!photoQueue.length;
     $("#clear-photos").disabled=uploading || finishing;
+    cameraControls();
     const blocked=finishing || writes>0 || [...cards.values()].some(c=>c.saveError || c.dirty);
     if(session) {
         const metrics=session.metrics||{};
@@ -800,6 +819,102 @@ async function uploadArchive(file) {
         uploading=false; $("#photos").value=""; renderBar();
     }
 }
+let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false;
+function cameraControls() {
+    $("#capture-view").disabled=!cameraStream || photoQueue.length>=8 || uploading || finishing;
+    $("#stop-camera").disabled=!cameraStream;
+}
+function stopCamera() {
+    if(cameraStream) cameraStream.getTracks().forEach(track=>track.stop());
+    cameraStream=null;
+    $("#camera-preview").srcObject=null;
+    $("#camera-frame").hidden=true;
+    $("#camera-status").textContent="Camera stopped.";
+    cameraControls();
+}
+async function startCamera() {
+    stopCamera();
+    if(!navigator.mediaDevices?.getUserMedia) {
+        $("#camera-status").textContent="Open over HTTPS or localhost for webcam access.";
+        return;
+    }
+    try {
+        cameraStream=await navigator.mediaDevices.getUserMedia({
+            video:{deviceId:$("#camera-device").value?{exact:$("#camera-device").value}:undefined},audio:false
+        });
+        const video=$("#camera-preview");
+        video.srcObject=cameraStream;
+        $("#camera-frame").hidden=false;
+        await video.play();
+        const devices=await navigator.mediaDevices.enumerateDevices();
+        const choice=$("#camera-device"), selected=choice.value;
+        choice.replaceChildren(new Option("Default camera",""));
+        devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>
+            choice.append(new Option(device.label||`Camera ${index+1}`,device.deviceId)));
+        choice.value=selected;
+        $("#camera-status").textContent="Camera ready. Center the label and rotate for another view.";
+        cameraControls();
+    } catch(error) {
+        stopCamera();
+        $("#camera-status").textContent="Could not start camera: "+error.message;
+    }
+}
+function cameraSample() {
+    const video=$("#camera-preview");
+    if(!cameraStream || !video.videoWidth) return null;
+    const canvas=document.createElement("canvas"); canvas.width=160; canvas.height=90;
+    const context=canvas.getContext("2d",{willReadFrequently:true});
+    if(!context) return null;
+    context.drawImage(video,0,0,160,90);
+    const pixels=context.getImageData(0,0,160,90).data, gray=new Uint8Array(160*90);
+    for(let i=0;i<gray.length;i++) gray[i]=(pixels[4*i]*77+pixels[4*i+1]*150+pixels[4*i+2]*29)>>8;
+    return gray;
+}
+function centerDifference(a,b) {
+    let sum=0,count=0;
+    for(let y=14;y<76;y+=2) for(let x=56;x<104;x+=2) { sum+=Math.abs(a[y*160+x]-b[y*160+x]); count++; }
+    return sum/count;
+}
+function labelDetail(gray) {
+    let center=0,sides=0,cn=0,sn=0;
+    for(let y=15;y<75;y+=2) for(let x=20;x<140;x+=2) {
+        const p=y*160+x, edge=Math.abs(gray[p]-gray[p+1])+Math.abs(gray[p]-gray[p+160]);
+        if(x>=56 && x<104) { center+=edge; cn++; }
+        else if(x<48 || x>=112) { sides+=edge; sn++; }
+    }
+    return center/cn>12 && center/cn>sides/sn*1.35;
+}
+async function captureView(automatic=false) {
+    const video=$("#camera-preview");
+    if(!cameraStream || !video.videoWidth || photoQueue.length>=8 || uploading || finishing) return;
+    const canvas=document.createElement("canvas"); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    canvas.getContext("2d").drawImage(video,0,0);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.93));
+    if(blob) addPhonePhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{type:"image/jpeg"})]);
+    cameraControls();
+    if(automatic) $("#camera-status").textContent="View captured. Rotate the tube for the next view.";
+}
+function checkAutoCapture() {
+    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || photoQueue.length>=8 || document.hidden) return;
+    const sample=cameraSample(); if(!sample) return;
+    const detailed=labelDetail(sample), moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
+    autoPrevious=sample;
+    if(!detailed || moving) { autoStableSince=0; $("#camera-guide").classList.remove("ready"); return; }
+    if(autoCaptured && centerDifference(sample,autoCaptured)<5.5) return;
+    if(!autoStableSince) autoStableSince=Date.now();
+    $("#camera-guide").classList.add("ready");
+    if(Date.now()-autoStableSince<1200) return;
+    autoBusy=true;
+    captureView(true).finally(()=>{ autoCaptured=sample; autoStableSince=0; autoBusy=false; });
+}
+$("#start-camera").onclick=startCamera;
+$("#stop-camera").onclick=stopCamera;
+$("#camera-device").onchange=()=>{ if(cameraStream) startCamera(); };
+$("#capture-view").onclick=()=>{ autoCaptured=cameraSample(); captureView(); };
+$("#auto-capture").onchange=()=>{ autoPrevious=null; autoCaptured=null; autoStableSince=0; };
+window.addEventListener("pagehide",stopCamera);
+setInterval(checkAutoCapture,200);
+cameraControls();
 window.addEventListener("beforeunload",event=>{
     if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
