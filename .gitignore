@@ -20,3 +20,4 @@ scanner.sqlite3*
 
 # Local hardware benchmark output
 /benchmark-results.json
+/thread-benchmark-results.json

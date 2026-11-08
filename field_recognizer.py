@@ -2,6 +2,7 @@
 import importlib.util
 import os
 from pathlib import Path
+from ocr_settings import ocr_threads
 
 
 class FieldReader:
@@ -16,7 +17,7 @@ class FieldReader:
         spec = importlib.util.spec_from_file_location('tube_field_onnx', helper)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        return module.Recognizer(root/'trained-model/english_finetuned_rec')
+        return module.Recognizer(root/'trained-model/english_finetuned_rec', threads=ocr_threads())
 
     def read(self, crop, field, label_type, fallback):
         # English improved serials/machines; dates and Large labels retain baseline OCR.

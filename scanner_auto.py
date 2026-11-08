@@ -5,6 +5,7 @@ import socket
 import sys
 from datetime import datetime
 from pathlib import Path
+from ocr_settings import ocr_threads
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -459,7 +460,7 @@ def process(job):
         "Rec.rec_batch_num": 1,
         "Cls.cls_batch_num": 1,
 
-        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+        "EngineConfig.onnxruntime.intra_op_num_threads": ocr_threads(),
         "EngineConfig.onnxruntime.inter_op_num_threads": 1,
         "EngineConfig.onnxruntime.enable_cpu_mem_arena": False,
     })
@@ -797,6 +798,7 @@ def process(job):
             )
 
     return {
+        "ocr_threads": ocr_threads(),
         "label_type": label_type,
         "suggestions": suggestions,
         "alternatives": alternatives,
