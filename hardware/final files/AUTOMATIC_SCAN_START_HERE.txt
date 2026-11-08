@@ -1,0 +1,18 @@
+AUTOMATIC THREE-TUBE SCANNER
+Use motor_scan/motor_scan.ino for automatic scanning. motor_test.ino is the separate manual test sketch; uploading it replaces automatic control.
+
+The UNO Q controller uses safe RPC handlers in the sketch loop. A bounded movement advances approximately 45 degrees at the tubes. The controller pauses 0.5 seconds before reporting DONE and stops if status heartbeats disappear for 1.5 seconds.
+
+Open the HTTPS scanner on the iPhone. Choose Three tubes on the rotating base, keep the phone in landscape, place one complete tube in each third, and press Scan three tubes automatically. Allow camera access and leave Safari visible. Start at Original speed.
+
+The scanner takes eight stopped views (0 through approximately 315 degrees), with seven movements between them. It saves three separate samples, eight photos each, and queues them for the existing OCR model. The camera uses fixed angle intervals, not label recognition to trigger each photo. Physical position is not sample identity: review decoded barcodes and readings.
+
+Stop aborts further movement. If a scan fails, incomplete images are not queued as complete samples. Do not change tube positions during a scan. No encoder is fitted, so completed step counts cannot verify actual physical rotation or detect slipping.
+
+Current local setup page: http://10.64.136.188:8081
+Current secure scanner: https://10.64.136.188:8443
+Install the local certificate profile on the iPhone and enable its trust. Login is in the laptop project file .env.automatic-scanner, excluded from Git and this ZIP.
+
+If Wi-Fi changes, the laptop IP may change. Regenerate the server certificate with scripts/setup_local_https.py and update the local firewall/server binding. After reconnecting USB run hardware/connect_motor_usb.ps1.
+
+Software sequence and separate-sample tests pass. The revised firmware was compiled for UNO Q, uploaded, and completed one acknowledged movement/settle/stop test. The user confirmed smooth physical movement during the test. End-to-end iPhone scanning still needs a real capture check.

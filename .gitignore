@@ -22,3 +22,10 @@ scanner.sqlite3*
 # Local hardware benchmark output
 /benchmark-results.json
 /thread-benchmark-results.json
+
+# Local runtime, browser profiles, captured samples and test output
+/tmp/
+/.run-main/
+/pytest-of-*/
+/raw_image/
+/result.json

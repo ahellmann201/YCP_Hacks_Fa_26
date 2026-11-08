@@ -26,6 +26,7 @@ from scanner.reading.sample_dates import normalize_sample_date, sampled_date_iss
 from scanner.io.session_cleanup import empty_uploads
 from scanner.io.motor_link import send_command
 from grok_assistant import AssistantRequest, AssistantService, FIELDS
+from automatic_capture import AutomaticCapture, make_router as make_capture_router
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
@@ -94,6 +95,9 @@ def valid_received(value):
         return True
     except ValueError:
         return False
+
+AUTO_CAPTURE = AutomaticCapture(STORE, UPLOADS)
+app.include_router(make_capture_router(AUTO_CAPTURE, valid_received))
 
 class NewSession(BaseModel):
     name: str = Field(default="", max_length=120)
