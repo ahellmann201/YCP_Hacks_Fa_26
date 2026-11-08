@@ -14,6 +14,14 @@ We built the system by combining a 3D-printed geared holder, an Arduino UNO Q mo
 
 This project addresses sample-label intake and transcription for the MRG Laboratories challenge. It does not analyze lubricant chemistry or determine equipment condition.
 
+## Demo and presentation
+
+- [Watch or download the software demo (MP4)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)
+- [Download the 13-slide project presentation with speaker notes](docs/demo/LRS-3-project-presentation.pptx)
+- [What the demo demonstrates](docs/demo/README.md)
+
+The video records the real application processing three saved views of one tube, decoding its barcode, showing review warnings, and exporting unreviewed values to CSV. The example handwriting remains unresolved. It does not demonstrate live motor capture or a live Grok call.
+
 ## What the prototype does
 
 - Accepts browser camera captures, 1–8 uploaded photos of one tube, or a ZIP with one folder per tube.
