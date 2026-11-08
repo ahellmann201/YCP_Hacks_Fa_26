@@ -11,7 +11,7 @@ sample_images/
     photo1.jpg
 ```
 
-In Windows File Explorer, right-click the parent folder and choose **Compress to ZIP file** (or **Send to → Compressed (zipped) folder**). On the scanner page, select **Upload tube folders (ZIP)** and choose the archive. Each folder containing photos becomes one tube, grouped by its full folder path. Put all photos for a tube directly in that tube folder; images in deeper subfolders are treated as separate groups. Photos at the ZIP root are rejected to avoid guessing tube membership.
+In Windows File Explorer, right-click the parent folder and choose **Compress to ZIP file** (or **Send to → Compressed (zipped) folder**). On the scanner page, select **Upload samples** and choose the archive. The same button accepts ordinary photos for one tube. Select one ZIP by itself or 1–8 photos; mixing ZIPs and loose photos is rejected. Each folder containing photos becomes one tube, grouped by its full folder path. Put all photos for a tube directly in that tube folder; images in deeper subfolders are treated as separate groups. Photos at the ZIP root are rejected to avoid guessing tube membership.
 
 The server checks the archive and prepares all tube records before adding them to the current session in one queue transaction. Each tube gets its own review card, timing and CSV row. Photos are processed sequentially on the Pi while the page continues polling. The original folder name appears on the review card. Source filenames are metadata, never extraction destinations. A failed connection after submission may still leave the batch queued: check the queue before resubmitting.
 

@@ -51,11 +51,9 @@ summary { cursor:pointer; padding:12px 0; }
 <div class="toolbar">
     <h1>Sample Scanner</h1>
     <input id="photos" type="file"
-        accept="image/jpeg,image/png,image/webp" multiple hidden>
-    <button id="upload" type="button">Upload sample</button>
-    <input id="batch-file" type="file" accept=".zip,application/zip" hidden>
-    <button id="upload-batch" type="button">Upload tube folders (ZIP)</button>
-    <p class="muted">ZIP format: one folder per tube, with 1–8 photos inside each folder.
+        accept="image/jpeg,image/png,image/webp,.zip,application/zip,application/x-zip-compressed" multiple hidden>
+    <button id="upload" type="button">Upload samples</button>
+    <p class="muted">Choose 1–8 photos of one tube, or one ZIP with a folder per tube.
         Maximum 100 tubes, 250 MB ZIP, 10 MB per photo. HEIC needs optional Pi support.</p>
     <a id="download" class="button" hidden>Download current CSV</a>
     <label style="display:block;margin:12px 0;font-size:15px;">
@@ -181,8 +179,7 @@ function fieldStates(c) {
 }
 function renderBar() {
     $("#upload").disabled=uploading || !initialized;
-    $("#upload-batch").disabled=uploading || !initialized;
-    $("#upload").textContent=uploading?"Uploading photos…":"Upload sample";
+    $("#upload").textContent=uploading?"Uploading…":"Upload samples";
     const blocked=writes>0 || [...cards.values()].some(c=>c.saveError);
     if(session) {
         const metrics=session.metrics||{};
@@ -475,6 +472,13 @@ $("#upload").onclick=()=>{
 $("#photos").onchange=async()=>{
     const files=Array.from($("#photos").files);
     if(!files.length || uploading) return;
+    const archives=files.filter(file=>file.name.toLowerCase().endsWith(".zip") ||
+        ["application/zip","application/x-zip-compressed"].includes(file.type));
+    if(archives.length) {
+        if(files.length!==1) return say("Choose one ZIP by itself, or photos of one tube. Don’t mix ZIPs and photos.",true);
+        await uploadArchive(archives[0]);
+        return;
+    }
     if(files.length>8) return say("Maximum 8 photos of one tube.",true);
     for(const file of files) {
         if(!["image/jpeg","image/png","image/webp"].includes(file.type))
@@ -498,15 +502,8 @@ $("#photos").onchange=async()=>{
         uploading=false; $("#photos").value=""; renderBar();
     }
 };
-$("#upload-batch").onclick=()=>{
-    if(uploading || !initialized) return;
-    $("#batch-file").value="";
-    $("#batch-file").click();
-};
-$("#batch-file").onchange=async()=>{
-    const file=$("#batch-file").files[0];
+async function uploadArchive(file) {
     if(!file || uploading) return;
-    if(!file.name.toLowerCase().endsWith(".zip")) return say("Choose a ZIP containing one folder per tube.",true);
     if(!file.size || file.size>250*1024*1024) return say("ZIP must be nonempty and no larger than 250 MB.",true);
     uploading=true; renderBar(); say("Uploading and checking tube folders…");
     try {
@@ -521,9 +518,9 @@ $("#batch-file").onchange=async()=>{
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the ZIP again.",true);
     } finally {
-        uploading=false; $("#batch-file").value=""; renderBar();
+        uploading=false; $("#photos").value=""; renderBar();
     }
-};
+}
 window.addEventListener("beforeunload",event=>{
     if(uploading || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
