@@ -4,49 +4,79 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sample Scanner</title>
+<script>
+try {
+    const saved = localStorage.getItem("scanner-theme");
+    const theme = saved === "dark" || saved === "light" ? saved
+        : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.dataset.theme = theme;
+} catch (_) {}
+</script>
 <style>
 * { box-sizing:border-box; }
+:root {
+    color-scheme:light;
+    --bg:#f3f5f8; --text:#172334; --surface:#fff; --shadow:0 2px 8px #0001;
+    --metric:#eef4ff; --focus:#f8fafc; --image:#fff;
+    --accent:#1763c6; --on-accent:#fff; --soft:#e6eefb; --soft-text:#174d94;
+    --muted:#58677a; --danger:#b02020; --line:#d4dce5; --field-border:#aeb8c6;
+    --bad-border:#dc2626; --bad-bg:#fff1f2; --readonly:#f1f3f6; --placeholder:#687587;
+    --choice:#f3f7ff; --ok:#278347; --input:#fff; --link:#1763c6;
+}
+html[data-theme="dark"] {
+    color-scheme:dark;
+    --bg:#10151d; --text:#e7eef7; --surface:#1b2431; --shadow:0 2px 12px #000a;
+    --metric:#1c2c44; --focus:#141c28; --image:#0d131c;
+    --accent:#3b82f6; --on-accent:#f8fbff; --soft:#24344d; --soft-text:#d3e4fb;
+    --muted:#a7b6c9; --danger:#ff9b9b; --line:#3a4a60; --field-border:#51647c;
+    --bad-border:#f87171; --bad-bg:#3f2228; --readonly:#121922; --placeholder:#93a4b8;
+    --choice:#172338; --ok:#4ade80; --input:#121922; --link:#8eb7ff;
+}
 body {
-    font:17px Arial,sans-serif; background:#f3f5f8; color:#172334;
+    font:17px Arial,sans-serif; background:var(--bg); color:var(--text);
     max-width:850px; margin:20px auto; padding:0 14px;
 }
+a { color:var(--link); }
 .toolbar,.card {
-    background:white; padding:20px; border-radius:12px; margin-bottom:18px;
+    background:var(--surface); padding:20px; border-radius:12px; margin-bottom:18px;
 }
-.toolbar { position:sticky; top:0; z-index:5; box-shadow:0 2px 8px #0001; }
+.toolbar { position:sticky; top:0; z-index:5; box-shadow:var(--shadow); }
+.title-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.title-row h1 { margin:0; }
 .metrics { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
-.metric { flex:1 1 180px; padding:12px; background:#eef4ff; border-radius:8px; }
+.metric { flex:1 1 180px; padding:12px; background:var(--metric); border-radius:8px; }
 .metric strong { display:block; font-size:24px; margin:5px 0; }
 .metric p { margin:0; }
-.focus-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; margin:14px 0; padding:12px; background:#f8fafc; border-radius:8px; }
-.field-crop { width:100%; max-height:160px; object-fit:contain; background:white; }
+.focus-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; margin:14px 0; padding:12px; background:var(--focus); border-radius:8px; }
+.field-crop { width:100%; max-height:160px; object-fit:contain; background:var(--image); }
 .crop-originals { display:grid; gap:10px; }
 .crop-originals a { display:block; font-size:14px; }
-.crop-originals img { display:block; width:100%; max-height:200px; object-fit:contain; background:white; }
-.startup-choice { padding:16px; border:2px solid #1763c6; border-radius:10px; margin:12px 0; background:#f3f7ff; }
+.crop-originals img { display:block; width:100%; max-height:200px; object-fit:contain; background:var(--image); }
+.startup-choice { padding:16px; border:2px solid var(--accent); border-radius:10px; margin:12px 0; background:var(--choice); }
 h1,h2 { margin-top:0; }
 button,.button {
     display:inline-block; padding:13px 18px; margin:5px 5px 5px 0;
     border:0; border-radius:7px; font:inherit; cursor:pointer;
     text-decoration:none; text-align:center;
 }
-button { background:#1763c6; color:white; }
-.button { background:#e6eefb; color:#174d94; }
+button { background:var(--accent); color:var(--on-accent); }
+.button,button.theme-toggle { background:var(--soft); color:var(--soft-text); }
+button.theme-toggle { margin:0; flex:0 0 auto; }
 button:disabled,.disabled { opacity:.5; cursor:default; }
-.muted { color:#58677a; font-size:14px; line-height:1.5; }
-.error { color:#b02020; }
+.muted { color:var(--muted); font-size:14px; line-height:1.5; }
+.error { color:var(--danger); }
 .status { white-space:pre-wrap; overflow-wrap:anywhere; }
-.preview { width:100%; height:auto; border:1px solid #d4dce5; }
+.preview { width:100%; height:auto; border:1px solid var(--line); }
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.field { width:100%; padding:11px; margin:6px 0; font:inherit;
-         border:1px solid #aeb8c6; border-radius:6px; }
-.field.bad { border:2px solid #dc2626; background:#fff1f2; }
-.field[readonly] { background:#f1f3f6; }
-.field::placeholder { color:#687587; opacity:1; }
-.help { color:#b02020; font-size:13px; margin:0 0 8px; }
-.confirm { display:block; padding:14px; margin:14px 0 5px; background:#eef4ff; }
+.field { width:100%; padding:11px; margin:6px 0; font:inherit; color:var(--text);
+         background:var(--input); border:1px solid var(--field-border); border-radius:6px; }
+.field.bad { border:2px solid var(--bad-border); background:var(--bad-bg); }
+.field[readonly] { background:var(--readonly); }
+.field::placeholder { color:var(--placeholder); opacity:1; }
+.help { color:var(--danger); font-size:13px; margin:0 0 8px; }
+.confirm { display:block; padding:14px; margin:14px 0 5px; background:var(--metric); }
 .confirm input { width:22px; height:22px; vertical-align:middle; margin-right:8px; }
-.card.confirmed { border:2px solid #278347; }
+.card.confirmed { border:2px solid var(--ok); }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -55,7 +85,10 @@ summary { cursor:pointer; padding:12px 0; }
 </head>
 <body>
 <div class="toolbar">
-    <h1>Sample Scanner</h1>
+    <div class="title-row">
+        <h1>Sample Scanner</h1>
+        <button id="theme" class="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+    </div>
     <div id="session-choice" class="startup-choice" hidden role="dialog" aria-labelledby="session-choice-title">
         <h2 id="session-choice-title">Resume an unfinished session?</h2>
         <p class="muted">Your previous photos and saved edits are still available. Resume a session or start a new one.</p>
@@ -105,6 +138,19 @@ summary { cursor:pointer; padding:12px 0; }
 <script>
 const $ = s => document.querySelector(s);
 const STORAGE = "scanner-review-session";
+const THEME = "scanner-theme";
+function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const dark = theme === "dark";
+    $("#theme").textContent = dark ? "Light mode" : "Dark mode";
+    $("#theme").setAttribute("aria-pressed", dark ? "true" : "false");
+}
+applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+$("#theme").onclick = () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem(THEME, next); } catch (_) {}
+    applyTheme(next);
+};
 const names = [
     ["sample_id","Sample ID"], ["date_sampled","Date Sampled"],
     ["date_received","Date Received"], ["machine","Machine"],
