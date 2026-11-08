@@ -6,13 +6,13 @@
 
 ## Watch the demo
 
-[![LRS-3 demo: real sample upload, barcode decoding and review](docs/demo/LRS-3-demo-preview.gif)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)
+[![LRS-3 demo: real prototype footage and dark-mode scanner](docs/demo/LRS-3-demo-preview.gif)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)
 
-**[▶ Watch the full demo video (MP4)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)**
+**[▶ Watch the dark-mode demo video (MP4)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)**
 
-The animated preview above shows the actual software. The full video demonstrates saved-photo upload, barcode decoding, review warnings, and CSV export. Handwriting in this example still needs review. Live motor capture and live Grok calls are not shown.
+The preview shows team-supplied footage of the real three-tube rig and phone scan in progress. The full video then demonstrates the scanner in dark mode using the supplied prototype photo, showing processing, review warnings and CSV export. The photo did not produce reliable label readings, so the recording keeps those fields unresolved. No live Grok call is shown.
 
-[Download the 13-slide presentation with speaker notes](docs/demo/LRS-3-project-presentation.pptx) · [Demo details](docs/demo/README.md)
+[Download the 3-slide dark presentation with speaker notes](docs/demo/LRS-3-project-presentation.pptx) · [Demo details](docs/demo/README.md)
 
 [Download the LRS-3 logo (PNG)](docs/assets/lrs-3-logo.png)
 
