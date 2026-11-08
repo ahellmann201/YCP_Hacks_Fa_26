@@ -1,0 +1,9 @@
+# Session performance boxes
+
+The upload toolbar shows average measured processing seconds per completed tube in the current session. This is the sum of recorded processing durations divided by the number of timed tubes, including unconfirmed samples. It excludes photo capture, upload transfer, queue wait, and manual review. The average is compared with the 30-second target. Old samples without timing are omitted.
+
+Field accuracy is `100 × correct fields / total fields` over currently confirmed samples with saved original readings. The app retains an original field snapshot when processing completes, before edits. It compares that snapshot with the fields saved when the reviewer selects “All good”. Editing or unconfirming a sample updates the session measurement rather than adding another observation.
+
+Each Small tube contributes five fields: Sample ID, Date Sampled, Machine, Component, and Serial Number. Each Large tube contributes five fields: Sample ID, Date Sampled, Machine, Component, and Reference Lube. Date Received and inapplicable fields do not count. Approved blanks count as fields and match only an originally blank value. Matching trims surrounding whitespace; serial numbers ignore letter case. Other differences, including date formatting changes, count as incorrect, so this measures exact field agreement rather than character accuracy. Sample ID includes the barcode result as part of the scanner's overall field output.
+
+This is accuracy against the reviewer's approved values, not the model's confidence or an independent laboratory benchmark. An unnoticed error approved unchanged will appear correct. Unreviewed samples are omitted. Historical samples without an original snapshot are omitted because their pre-edit readings cannot be reconstructed reliably. New completed scans retain their snapshots in SQLite across reloads and review edits.

@@ -14,6 +14,10 @@ body {
     background:white; padding:20px; border-radius:12px; margin-bottom:18px;
 }
 .toolbar { position:sticky; top:0; z-index:5; box-shadow:0 2px 8px #0001; }
+.metrics { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
+.metric { flex:1 1 180px; padding:12px; background:#eef4ff; border-radius:8px; }
+.metric strong { display:block; font-size:24px; margin:5px 0; }
+.metric p { margin:0; }
 h1,h2 { margin-top:0; }
 button,.button {
     display:inline-block; padding:13px 18px; margin:5px 5px 5px 0;
@@ -55,6 +59,19 @@ summary { cursor:pointer; padding:12px 0; }
     Include unreviewed samples in CSV
 </label>
 <p id="queue" role="status" aria-live="polite"></p>
+    <div class="metrics" role="status" aria-live="polite">
+        <div class="metric">Average processing / tube
+            <strong id="average-time">—</strong>
+            <p id="average-detail" class="muted">No timed tubes yet.</p>
+        </div>
+        <div class="metric">Field accuracy
+            <strong id="field-accuracy">—</strong>
+            <p id="accuracy-detail" class="muted">Confirm reviewed samples to measure accuracy.</p>
+        </div>
+    </div>
+    <p class="muted">Current session only. Timing excludes upload, queue wait and manual review.
+        Accuracy compares original readings with your “All good” fields, including confirmed blanks.
+        Date Received and unused fields are excluded; each applicable field counts equally.</p>
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
     <p class="muted">
@@ -163,6 +180,17 @@ function renderBar() {
     $("#upload").textContent=uploading?"Uploading photos…":"Upload sample";
     const blocked=writes>0 || [...cards.values()].some(c=>c.saveError);
     if(session) {
+        const metrics=session.metrics||{};
+        const average=metrics.average_processing_seconds;
+        $("#average-time").textContent=Number.isFinite(average)?`${average.toFixed(1)}s`:"—";
+        $("#average-detail").textContent=Number.isFinite(average)
+            ? `${metrics.timed_tubes} tubes · ${average<=30?"Within":"Over"} 30s average target`
+            : "No timed tubes yet.";
+        const accuracy=metrics.field_accuracy_percent;
+        $("#field-accuracy").textContent=Number.isFinite(accuracy)?`${accuracy.toFixed(1)}%`:"—";
+        $("#accuracy-detail").textContent=Number.isFinite(accuracy)
+            ? `${metrics.correct_fields} correct / ${metrics.total_fields} fields · ${metrics.scored_tubes} confirmed tubes`
+            : "Confirm reviewed samples to measure accuracy.";
         const q=session.counts||{};
         $("#queue").textContent=
             `${q.queued||0} waiting · ${q.processing||0} processing · `+

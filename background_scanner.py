@@ -64,6 +64,7 @@ class QueueStore(SessionStore):
             return job
 
     def complete(self, job, review, notices, processing_seconds=None):
+        review['original_fields'] = dict(review.get('fields', {}))
         timing = None
         if processing_seconds is not None:
             waiting = job.get('queue_seconds')
@@ -120,9 +121,29 @@ class QueueStore(SessionStore):
             result["jobs"] = []
             result["confirmed_count"] = 0
             result["ready_count"] = 0
+            durations = []
+            correct_fields = total_fields = scored_tubes = 0
             for row in rows:
                 review = json.loads(row["review_json"]) if row["review_json"] else {}
                 confirmed = bool(review.get("confirmed", False))
+                timing = json.loads(row['timing_json']) if row['timing_json'] else None
+                if row['state'] == 'done' and timing is not None:
+                    duration = timing.get('processing_seconds')
+                    if isinstance(duration, (int, float)) and duration >= 0:
+                        durations.append(duration)
+                original = review.get('original_fields')
+                if confirmed and original is not None and review.get('label_type') in {'small', 'large'}:
+                    keys = ['sample_id', 'date_sampled', 'machine', 'component']
+                    keys.append('serial_number' if review['label_type'] == 'small' else 'reference_lube')
+                    approved = review.get('fields', {})
+                    for key in keys:
+                        before = str(original.get(key) or '').strip()
+                        after = str(approved.get(key) or '').strip()
+                        if key == 'serial_number':
+                            before, after = before.upper(), after.upper()
+                        correct_fields += int(before == after)
+                        total_fields += 1
+                    scored_tubes += 1
                 result["confirmed_count"] += int(confirmed)
                 result["ready_count"] += int(row["state"] == "done" and not confirmed)
                 result["jobs"].append({
@@ -131,7 +152,7 @@ class QueueStore(SessionStore):
                     "sample_id": review.get("fields", {}).get("sample_id", ""),
                     "state": row["state"], "error": row["error"],
                     "notices": json.loads(row["notices_json"]),
-                    "timing": json.loads(row['timing_json']) if row['timing_json'] else None,
+                    "timing": timing,
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
@@ -139,6 +160,12 @@ class QueueStore(SessionStore):
                         )
                     } if review else None,
                 })
+            result['metrics'] = {
+                'average_processing_seconds': sum(durations)/len(durations) if durations else None,
+                'timed_tubes': len(durations), 'correct_fields': correct_fields,
+                'total_fields': total_fields, 'scored_tubes': scored_tubes,
+                'field_accuracy_percent': 100*correct_fields/total_fields if total_fields else None,
+            }
             return result
 
     def confirmed_reviews(self, session_id):
