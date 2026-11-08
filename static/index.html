@@ -53,6 +53,10 @@ summary { cursor:pointer; padding:12px 0; }
     <input id="photos" type="file"
         accept="image/jpeg,image/png,image/webp" multiple hidden>
     <button id="upload" type="button">Upload sample</button>
+    <input id="batch-file" type="file" accept=".zip,application/zip" hidden>
+    <button id="upload-batch" type="button">Upload tube folders (ZIP)</button>
+    <p class="muted">ZIP format: one folder per tube, with 1–8 photos inside each folder.
+        Maximum 100 tubes, 250 MB ZIP, 10 MB per photo. HEIC needs optional Pi support.</p>
     <a id="download" class="button" hidden>Download current CSV</a>
     <label style="display:block;margin:12px 0;font-size:15px;">
     <input id="include-unreviewed" type="checkbox">
@@ -177,6 +181,7 @@ function fieldStates(c) {
 }
 function renderBar() {
     $("#upload").disabled=uploading || !initialized;
+    $("#upload-batch").disabled=uploading || !initialized;
     $("#upload").textContent=uploading?"Uploading photos…":"Upload sample";
     const blocked=writes>0 || [...cards.values()].some(c=>c.saveError);
     if(session) {
@@ -279,6 +284,12 @@ function addCard(job) {
     title.textContent=review.fields.sample_id
         ? `Sample ${review.fields.sample_id}` : "Sample needs review";
     c.el.append(title);
+    if(review.source_folder) {
+        const source=document.createElement("p");
+        source.className="muted";
+        source.textContent=`Tube folder: ${review.source_folder}`;
+        c.el.append(source);
+    }
 
     const timing=job.timing;
     if(timing && Number.isFinite(timing.processing_seconds)) {
@@ -485,6 +496,32 @@ $("#photos").onchange=async()=>{
         say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
     } finally {
         uploading=false; $("#photos").value=""; renderBar();
+    }
+};
+$("#upload-batch").onclick=()=>{
+    if(uploading || !initialized) return;
+    $("#batch-file").value="";
+    $("#batch-file").click();
+};
+$("#batch-file").onchange=async()=>{
+    const file=$("#batch-file").files[0];
+    if(!file || uploading) return;
+    if(!file.name.toLowerCase().endsWith(".zip")) return say("Choose a ZIP containing one folder per tube.",true);
+    if(!file.size || file.size>250*1024*1024) return say("ZIP must be nonempty and no larger than 250 MB.",true);
+    uploading=true; renderBar(); say("Uploading and checking tube folders…");
+    try {
+        await ensureSession();
+        const form=new FormData();
+        form.append("archive",file);
+        form.append("session_id",sessionId);
+        form.append("date_received",today());
+        const result=await api("/upload-batch",{method:"POST",body:form});
+        say(`${result.queued_samples} tubes queued separately in this session. You can upload more while they process.`);
+        await refresh();
+    } catch(error) {
+        say(error.message+"\nIf the connection failed, check the queue before uploading the ZIP again.",true);
+    } finally {
+        uploading=false; $("#batch-file").value=""; renderBar();
     }
 };
 window.addEventListener("beforeunload",event=>{

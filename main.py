@@ -5,6 +5,8 @@ import logging
 import re
 import shutil
 import sqlite3
+import tempfile
+import zipfile
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -16,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from background_scanner import QueueStore, ScannerQueue
 from session_store import SessionError
+from zip_import import prepare_archive, ImportError as BatchImportError
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
@@ -254,3 +257,33 @@ def upload(files: List[UploadFile] = File(...),
         finally:
             for file in files:
                 file.file.close()
+
+
+@app.post('/upload-batch')
+def upload_batch(archive: UploadFile = File(...), session_id: str = Form(...),
+                 date_received: str = Form(...)):
+    moved = []
+    committed = False
+    try:
+        STORE.require_active(session_id)
+        if not valid_received(date_received):
+            raise HTTPException(400, 'Date Received must be YYYY-MM-DD.')
+        with tempfile.TemporaryDirectory(dir=UPLOADS, prefix='.batch-') as temporary:
+            staging = Path(temporary)
+            samples = prepare_archive(archive.file, staging, session_id, date_received, STORE.now())
+            for sample in samples:
+                destination = UPLOADS/sample['record_id']
+                (staging/sample['record_id']).rename(destination)
+                moved.append(destination)
+            STORE.register_batch(session_id, [s['record_id'] for s in samples])
+            committed = True
+        return {'queued_samples':len(samples), 'record_ids':[s['record_id'] for s in samples]}
+    except (BatchImportError, zipfile.BadZipFile, NotImplementedError) as error:
+        raise HTTPException(400, str(error))
+    except OSError:
+        raise HTTPException(500, 'Could not import ZIP. Check Pi storage.')
+    finally:
+        archive.file.close()
+        if not committed:
+            for folder in moved:
+                shutil.rmtree(folder, ignore_errors=True)

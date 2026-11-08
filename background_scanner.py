@@ -30,13 +30,17 @@ class QueueStore(SessionStore):
                     db.execute(f'ALTER TABLE scan_jobs ADD COLUMN {name} {kind}')
 
     def register(self, session_id, record_id):
+        self.register_batch(session_id, [record_id])
+
+    def register_batch(self, session_id, record_ids):
         with self.connection(write=True) as db:
             self._active(db, session_id)
-            self._attach(db, session_id, record_id)
-            db.execute("""
-                INSERT OR IGNORE INTO scan_jobs(record_id, state, queued_at)
-                VALUES (?, 'queued', ?)
-            """, (record_id, time.time()))
+            for record_id in record_ids:
+                self._attach(db, session_id, record_id)
+                db.execute("""
+                    INSERT OR IGNORE INTO scan_jobs(record_id, state, queued_at)
+                    VALUES (?, 'queued', ?)
+                """, (record_id, time.time()))
 
     def recover(self):
         with self.connection(write=True) as db:
@@ -156,7 +160,7 @@ class QueueStore(SessionStore):
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
-                            "image_count", "evidence"
+                            "image_count", "evidence", "source_folder"
                         )
                     } if review else None,
                 })
@@ -335,6 +339,7 @@ class ScannerQueue:
             "confirmed": False, "reviewed_at": None,
             "fields": fields, "raw_suggestions": raw,
             "image_count": len(names),
+            "source_folder": sample.get('source_folder'),
         }
         try:
             from label_preview import build_preview
