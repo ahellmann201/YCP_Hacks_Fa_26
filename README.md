@@ -4,6 +4,16 @@
 
 **Three tubes. One scan. Clear sample records.**
 
+## Watch the demo
+
+[![LRS-3 demo: real sample upload, barcode decoding and review](docs/demo/LRS-3-demo-preview.gif)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)
+
+**[▶ Watch the full demo video (MP4)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)**
+
+The animated preview above shows the actual software. The full video demonstrates saved-photo upload, barcode decoding, review warnings, and CSV export. Handwriting in this example still needs review. Live motor capture and live Grok calls are not shown.
+
+[Download the 13-slide presentation with speaker notes](docs/demo/LRS-3-project-presentation.pptx) · [Demo details](docs/demo/README.md)
+
 [Download the LRS-3 logo (PNG)](docs/assets/lrs-3-logo.png)
 
 A motorized sample-label scanner built for the MRG Laboratories challenge: photograph three tubes, save each tube as an independent sample, read its label, review uncertain fields, and export a CSV.
@@ -13,14 +23,6 @@ We built the system by combining a 3D-printed geared holder, an Arduino UNO Q mo
 [Windows setup](#set-up-on-a-new-windows-laptop) · [Phone setup](#connect-an-iphone-over-local-https) · [Architecture](#architecture) · [Grok assistant](#how-the-xai-grok-assistant-helps) · [Hardware files](hardware/final%20files/) · [Detailed assistant configuration](ASSISTANT.md)
 
 This project addresses sample-label intake and transcription for the MRG Laboratories challenge. It does not analyze lubricant chemistry or determine equipment condition.
-
-## Demo and presentation
-
-- [Watch or download the software demo (MP4)](https://raw.githubusercontent.com/ahellmann201/YCP_Hacks_Fa_26/main/docs/demo/LRS-3-software-demo.mp4)
-- [Download the 13-slide project presentation with speaker notes](docs/demo/LRS-3-project-presentation.pptx)
-- [What the demo demonstrates](docs/demo/README.md)
-
-The video records the real application processing three saved views of one tube, decoding its barcode, showing review warnings, and exporting unreviewed values to CSV. The example handwriting remains unresolved. It does not demonstrate live motor capture or a live Grok call.
 
 ## What the prototype does
 
