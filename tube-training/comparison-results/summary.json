@@ -1,0 +1,91 @@
+{
+  "models": {
+    "original": {
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.19642857142857142
+    },
+    "trained": {
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.14285714285714285
+    },
+    "english": {
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 4,
+      "character_error_rate": 0.14285714285714285
+    }
+  },
+  "by_field": {
+    "original": {
+      "date_sampled": {
+        "fields": 4,
+        "raw_correct": 1,
+        "after_date_formatting_correct": 2,
+        "character_error_rate": 0.2
+      },
+      "machine": {
+        "fields": 3,
+        "raw_correct": 2,
+        "after_date_formatting_correct": 2,
+        "character_error_rate": 0.16666666666666666
+      },
+      "serial_number": {
+        "fields": 2,
+        "raw_correct": 1,
+        "after_date_formatting_correct": 1,
+        "character_error_rate": 0.2222222222222222
+      }
+    },
+    "trained": {
+      "date_sampled": {
+        "fields": 4,
+        "raw_correct": 1,
+        "after_date_formatting_correct": 2,
+        "character_error_rate": 0.15
+      },
+      "machine": {
+        "fields": 3,
+        "raw_correct": 2,
+        "after_date_formatting_correct": 2,
+        "character_error_rate": 0.16666666666666666
+      },
+      "serial_number": {
+        "fields": 2,
+        "raw_correct": 1,
+        "after_date_formatting_correct": 1,
+        "character_error_rate": 0.1111111111111111
+      }
+    },
+    "english": {
+      "date_sampled": {
+        "fields": 4,
+        "raw_correct": 1,
+        "after_date_formatting_correct": 1,
+        "character_error_rate": 0.25
+      },
+      "machine": {
+        "fields": 3,
+        "raw_correct": 1,
+        "after_date_formatting_correct": 1,
+        "character_error_rate": 0.16666666666666666
+      },
+      "serial_number": {
+        "fields": 2,
+        "raw_correct": 2,
+        "after_date_formatting_correct": 2,
+        "character_error_rate": 0.0
+      }
+    }
+  },
+  "two_part_date_policy": "review",
+  "model_sha256": {
+    "original": "5825fc7ebf84ae7a412be049820b4d86d77620f204a041697b0494669b1742c5",
+    "trained": "1c083b912093fceb9a0665b780dbc7e9604d79a2e21cce355873ccc8b421738b",
+    "english": "c3461add59bb4323ecba96a492ab75e06dda42467c9e3d0c18db5d1d21924be8"
+  },
+  "note": "Development comparison only. Date formatting is postprocessing, not better OCR. Model selection on these same tubes needs a fresh independent test."
+}

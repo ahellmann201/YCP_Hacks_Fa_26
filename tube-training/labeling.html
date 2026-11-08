@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tube training labels</title><style>
+*{box-sizing:border-box}body{font:16px Arial;margin:0;background:#eef2f7;color:#18263b}header{padding:18px 24px;background:#172c49;color:white}
+main{display:grid;grid-template-columns:minmax(500px,1fr) 360px;gap:18px;padding:18px}.panel{background:white;padding:18px;border-radius:10px}
+label{display:block;margin:12px 0 5px}input,select,textarea,button{font:inherit;padding:9px;width:100%;margin:4px 0;border:1px solid #bcc7d7;border-radius:5px}button{cursor:pointer;background:#e9eff9}button.primary{background:#1763c6;color:white;border:0}
+.row{display:flex;gap:8px}.row>*{flex:1}#viewport{height:70vh;overflow:auto;background:#28303b}canvas{display:block;touch-action:none;cursor:crosshair}#preview{max-width:100%;max-height:140px;border:1px solid #aaa}.hint{font-size:14px;color:#53647b;line-height:1.5}.error{color:#b02020}#saved img{width:100%;max-height:100px;object-fit:contain}.saved{padding:10px 0;border-top:1px solid #ddd}#message{white-space:pre-wrap} @media(max-width:950px){main{grid-template-columns:1fr}#viewport{height:60vh}}
+</style></head><body>
+<header><h1 style="margin:0">Tube OCR training labels</h1><p>Draw a box around ONE complete field, then type exactly what it says. Originals are unchanged.</p><p><a href="/review" style="color:white">Review the prepared field drafts</a></p></header>
+<main><section class="panel">
+<div class="row"><div><label for="tube">Tube</label><select id="tube"></select></div><div><label for="photo">Photo</label><select id="photo"></select></div></div>
+<div class="row"><button id="previous">Previous photo</button><button id="next">Next photo</button><button id="rotate">Rotate 90°</button><button id="flip">Rotate 180°</button></div>
+<label for="zoom">Zoom</label><input id="zoom" type="range" min="1" max="5" step=".25" value="1">
+<div id="viewport"><canvas id="canvas"></canvas></div>
+<p class="hint">Drag to select a field. Include all characters, with a little margin. Avoid printed headings unless they are part of the value, such as UP in a machine number. One angle does not need to contain every field.</p>
+<h3>Saved crops for this photo</h3><div id="saved"></div>
+</section><aside class="panel">
+<h2>Tube settings</h2>
+<label>Label type<select id="type"><option value="unknown">Choose Small or Large</option><option value="small">Small</option><option value="large">Large</option></select></label>
+<label>Dataset role<select id="split"><option value="unassigned">Not assigned yet</option><option value="train">Training</option><option value="val">Validation</option><option value="exclude">Exclude</option></select></label>
+<label>Group ID<input id="group"></label><p class="hint">All photos of one tube stay together. If you recognize the same writer across tubes, use the same group ID for those tubes and give the group one dataset role.</p>
+<label>Tube notes<textarea id="tube-notes" rows="2"></textarea></label><button id="save-tube">Save tube settings</button>
+<hr><h2>Label one field</h2><label>Field<select id="field"><option value="machine">Machine</option><option value="date_sampled">Date Sampled</option><option value="serial_number">Serial Number</option><option value="reference_lube">Reference Lube</option><option value="component">Component</option><option value="sample_id">Sample ID / barcode</option></select></label>
+<img id="preview" alt="Selected field crop" hidden>
+<label>Correct text<input id="text" autocomplete="off" placeholder="Type the visible value"></label>
+<label>Status<select id="status"><option value="verified">I checked the complete value</option><option value="blank">The field is genuinely blank</option><option value="uncertain">Unreadable / incomplete — do not train on it</option></select></label>
+<label>Crop notes<textarea id="notes" rows="2"></textarea></label>
+<button id="save-crop" class="primary">Save field crop</button>
+<p class="hint">Keep partial dates exactly as written. A blank is not the same as unreadable text. Small-label circled components and barcodes are exported as separate tasks, not handwriting text.</p>
+<hr><p id="progress"></p><button id="export" class="primary">Export verified dataset</button><p class="hint">Export requires both Training and Validation text crops. No uncertain crops enter training.</p><p id="message" role="status"></p>
+</aside></main>
+<script>
+const $=s=>document.querySelector(s), canvas=$('#canvas'), ctx=canvas.getContext('2d');
+let data, image=new Image(), rotation=0, box=null, start=null, active=null, loaded=false;
+async function api(url,body){const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
+function say(text,error=false){$('#message').textContent=text;$('#message').className=error?'error':'';}
+function options(select,rows){select.replaceChildren();rows.forEach(([value,text])=>{const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);});}
+function current(){return data.manifest.find(r=>r.image_id===$('#photo').value);}
+function repaint(){if(!loaded)return;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0);if(box){ctx.lineWidth=Math.max(4,image.width/300);ctx.strokeStyle='#ff2727';ctx.strokeRect(box[0],box[1],box[2]-box[0],box[3]-box[1]);}}
+function resize(){if(!loaded)return;const v=$('#viewport');const base=Math.min(v.clientWidth,v.clientHeight*image.width/image.height);canvas.style.width=base*Number($('#zoom').value)+'px';canvas.style.height='auto';}
+function loadPhoto(){const row=current();if(!row)return;active=row.image_id;loaded=false;box=null;$('#preview').hidden=true;image=new Image();image.onload=()=>{canvas.width=image.width;canvas.height=image.height;loaded=true;resize();repaint();};image.src='/photo/'+encodeURIComponent(row.image_id)+'?rotate='+rotation;renderSaved();}
+function showTube(){const id=$('#tube').value,meta=data.tubes[id];$('#type').value=meta.label_type;$('#split').value=meta.split;$('#group').value=meta.group_id;$('#tube-notes').value=meta.notes||'';options($('#photo'),data.manifest.filter(r=>r.tube_id===id).map(r=>[r.image_id,r.image_id.split('_').slice(2).join('_')]));rotation=current()?.view_rotation||0;loadPhoto();}
+async function saveTube(){const id=$('#tube').value;const meta={label_type:$('#type').value,split:$('#split').value,group_id:$('#group').value.trim(),notes:$('#tube-notes').value};await api('/api/tube',{tube_id:id,...meta});data.tubes[id]=meta;}
+function point(event){const r=canvas.getBoundingClientRect();return [Math.max(0,Math.min(canvas.width,(event.clientX-r.left)*canvas.width/r.width)),Math.max(0,Math.min(canvas.height,(event.clientY-r.top)*canvas.height/r.height))];}
+canvas.onpointerdown=e=>{if(!loaded)return;canvas.setPointerCapture(e.pointerId);start=point(e);box=null;};
+canvas.onpointermove=e=>{if(!start)return;const p=point(e);box=[Math.min(start[0],p[0]),Math.min(start[1],p[1]),Math.max(start[0],p[0]),Math.max(start[1],p[1])];repaint();};
+canvas.onpointerup=e=>{if(!start)return;const p=point(e);box=[Math.min(start[0],p[0]),Math.min(start[1],p[1]),Math.max(start[0],p[0]),Math.max(start[1],p[1])].map(Math.round);start=null;repaint();const [x1,y1,x2,y2]=box;if(x2-x1<8||y2-y1<8){box=null;return;}const preview=document.createElement('canvas');preview.width=x2-x1;preview.height=y2-y1;preview.getContext('2d').drawImage(image,x1,y1,x2-x1,y2-y1,0,0,preview.width,preview.height);$('#preview').src=preview.toDataURL();$('#preview').hidden=false;};
+canvas.onpointercancel=()=>{start=null;};
+function renderSaved(){const rows=data.annotations.filter(a=>a.image_id===active);$('#saved').replaceChildren();rows.forEach(a=>{const div=document.createElement('div');div.className='saved';const title=document.createElement('p');title.textContent=`${a.field}: ${a.text||'[blank]'} — ${a.status}`;const img=document.createElement('img');img.src='/crop/'+a.id;img.alt=a.field;img.loading='lazy';const remove=document.createElement('button');remove.textContent='Remove annotation';remove.onclick=async()=>{if(!confirm('Remove this annotation from the dataset?'))return;try{await api('/api/remove',{id:a.id});data.annotations=data.annotations.filter(v=>v.id!==a.id);renderSaved();}catch(e){say(e.message,true);}};div.append(title,img,remove);$('#saved').append(div);});const verified=data.annotations.filter(a=>a.status==='verified').length;$('#progress').textContent=`${data.manifest.length} photos · ${Object.keys(data.tubes).length} tubes · ${verified} verified field crops`;}
+$('#tube').onchange=showTube;$('#photo').onchange=()=>{rotation=current()?.view_rotation||0;loadPhoto();};$('#zoom').oninput=resize;window.onresize=resize;
+$('#rotate').onclick=()=>{rotation=(rotation+90)%360;loadPhoto();};$('#flip').onclick=()=>{rotation=(rotation+180)%360;loadPhoto();};
+function changePhoto(delta){const s=$('#photo');s.selectedIndex=Math.max(0,Math.min(s.options.length-1,s.selectedIndex+delta));rotation=current()?.view_rotation||0;loadPhoto();}$('#previous').onclick=()=>changePhoto(-1);$('#next').onclick=()=>changePhoto(1);
+$('#save-tube').onclick=async()=>{try{await saveTube();say('Tube settings saved.');}catch(e){say(e.message,true);}};
+$('#save-crop').onclick=async()=>{try{if(!loaded||!box)throw Error('Draw a box around the complete field first.');await saveTube();let text=$('#text').value;if($('#field').value==='serial_number')text=text.toUpperCase();const a=await api('/api/crop',{image_id:active,field:$('#field').value,rotation,box,text,status:$('#status').value,notes:$('#notes').value});data.annotations.push(a);renderSaved();say('Field saved. Select the next field.');$('#text').value='';$('#notes').value='';box=null;$('#preview').hidden=true;repaint();}catch(e){say(e.message,true);}};
+$('#export').onclick=async()=>{try{await saveTube();const result=await api('/api/export',{});say(`Exported ${result.training_crops} training crops and ${result.validation_crops} validation crops.\n${result.path}\n${result.note}`);}catch(e){say(e.message,true);}};
+(async()=>{try{data=await api('/api/state');options($('#tube'),Object.keys(data.tubes).sort().map(t=>[t,t]));showTube();say('Choose the tube label type, rotate if needed, and draw a field box.');}catch(e){say(e.message,true);}})();
+</script></body></html>

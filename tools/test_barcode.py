@@ -8,7 +8,7 @@ from PIL import Image, ImageOps
 
 if len(sys.argv) != 2:
     raise SystemExit(
-        "Usage: python test_barcode.py uploads/SAMPLE_FOLDER/image_1.jpg"
+        "Usage: python tools/test_barcode.py uploads/SAMPLE_FOLDER/image_1.jpg"
     )
 
 path = Path(sys.argv[1])

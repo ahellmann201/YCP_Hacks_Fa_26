@@ -1,0 +1,89 @@
+{
+  "samples": 9,
+  "all_predictions_match": true,
+  "max_absolute_output_difference": 1.3589859008789062e-05,
+  "numeric_tolerance": {
+    "rtol": 0.001,
+    "atol": 0.0001
+  },
+  "metrics": {
+    "acc": 0.44444395061783265,
+    "norm_edit_dis": 0.8390654345481062
+  },
+  "input": [
+    "DynamicDimension.0",
+    3,
+    48,
+    "DynamicDimension.1"
+  ],
+  "output": [
+    "DynamicDimension.2",
+    "DynamicDimension.3",
+    18385
+  ],
+  "predictions": [
+    {
+      "expected": "UP6902",
+      "paddle": "UP6902",
+      "onnx": "UP6902",
+      "onnx_confidence": 0.9784021377563477,
+      "match": true
+    },
+    {
+      "expected": "9.27.26",
+      "paddle": "9.27-26",
+      "onnx": "9.27-26",
+      "onnx_confidence": 0.9171348214149475,
+      "match": true
+    },
+    {
+      "expected": "PP9710241",
+      "paddle": "PP9710241",
+      "onnx": "PP9710241",
+      "onnx_confidence": 0.8094823956489563,
+      "match": true
+    },
+    {
+      "expected": "UP6337",
+      "paddle": "UP6337",
+      "onnx": "UP6337",
+      "onnx_confidence": 0.8999982476234436,
+      "match": true
+    },
+    {
+      "expected": "8-2-26",
+      "paddle": "8-2-26",
+      "onnx": "8-2-26",
+      "onnx_confidence": 0.974907398223877,
+      "match": true
+    },
+    {
+      "expected": "PP0004037",
+      "paddle": "VP004037",
+      "onnx": "VP004037",
+      "onnx_confidence": 0.7577998638153076,
+      "match": true
+    },
+    {
+      "expected": "9/20",
+      "paddle": "9120",
+      "onnx": "9120",
+      "onnx_confidence": 0.7423682808876038,
+      "match": true
+    },
+    {
+      "expected": "UP7102",
+      "paddle": "UPMio2",
+      "onnx": "UPMio2",
+      "onnx_confidence": 0.6990740895271301,
+      "match": true
+    },
+    {
+      "expected": "8/7",
+      "paddle": "87",
+      "onnx": "87",
+      "onnx_confidence": 0.507278323173523,
+      "match": true
+    }
+  ]
+}

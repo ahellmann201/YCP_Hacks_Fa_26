@@ -62,9 +62,11 @@ def build_preview(folder, run_id, result, kind):
                     with Image.open(root / f"photo_{index}_aligned.jpg") as image:
                         height = image.height
                         if field == "component":
-                            region = (60, int(height*.80), 1160, height)
+                            region = (60, int(680*.80), 1160, height)
+                        elif entry.get('barcode_box'):
+                            region = tuple(entry['barcode_box'])
                         elif kind == "small":
-                            region = (216, int(height*.02), 948, int(height*.25))
+                            region = (216, int(680*.02), 948, int(680*.25))
                         else:
                             region = (564, int(height*.65), 1020, int(height*.91))
                         crop = image.crop(region).convert("RGB")
@@ -103,6 +105,8 @@ def build_preview(folder, run_id, result, kind):
             draw.text((left+10, top+50), "Check original photos",
                       fill="#a02020", font=font)
         else:
+            # Save the selected actual field crop for the focused review row.
+            best.save(root / f"field_{field}.jpg", quality=90)
             best.thumbnail((right-left-20, bottom-top-50))
             sheet.paste(best, (left+10, top+45))
             best.close()

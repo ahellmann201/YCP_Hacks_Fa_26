@@ -1,0 +1,82 @@
+[
+  {
+    "model": "baseline",
+    "python": "3.12.14",
+    "onnxruntime": "1.31.1",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_threads": 1,
+    "images": 2,
+    "repeats_per_image": 10,
+    "warmup_passes": 1,
+    "import_seconds": 0.5520719999985886,
+    "model_load_seconds": 0.19244950000211247,
+    "first_recognition_seconds": 0.02270150000185822,
+    "first_prediction": {
+      "text": "UP6902",
+      "confidence": 0.9937087893486023
+    },
+    "peak_after_load_mib": 88.59375,
+    "peak_process_mib": 88.59375,
+    "warm_median_seconds": 0.02043509999930393,
+    "warm_p95_seconds": 0.021674999999959255,
+    "warm_min_seconds": 0.019190099999832455,
+    "warm_max_seconds": 0.022117699998489115,
+    "per_image": [
+      {
+        "image": "000_0.png",
+        "median_seconds": 0.020275150000088615,
+        "text": "UP6902",
+        "confidence": 0.9937087893486023
+      },
+      {
+        "image": "002_0.png",
+        "median_seconds": 0.02043509999930393,
+        "text": "PP9710241",
+        "confidence": 0.9634513854980469
+      }
+    ],
+    "scope": "Cropped-field recognition including preprocessing and decoding. Images loaded before timing; excludes upload, barcode, cropping and the FastAPI process. Process peak includes Python, libraries, model and images. Startup is a fresh process, not a cold filesystem cache.",
+    "worker_total_seconds": 1.7754000999993877
+  },
+  {
+    "model": "smudge_candidate",
+    "python": "3.12.14",
+    "onnxruntime": "1.31.1",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_threads": 1,
+    "images": 2,
+    "repeats_per_image": 10,
+    "warmup_passes": 1,
+    "import_seconds": 0.514219000000594,
+    "model_load_seconds": 0.18689740000263555,
+    "first_recognition_seconds": 0.022243499999603955,
+    "first_prediction": {
+      "text": "UP6902",
+      "confidence": 0.9974732995033264
+    },
+    "peak_after_load_mib": 87.609375,
+    "peak_process_mib": 87.609375,
+    "warm_median_seconds": 0.020736599999509053,
+    "warm_p95_seconds": 0.022291199999017408,
+    "warm_min_seconds": 0.019490700000460492,
+    "warm_max_seconds": 0.022497400001157075,
+    "per_image": [
+      {
+        "image": "000_0.png",
+        "median_seconds": 0.021118300001035095,
+        "text": "UP6902",
+        "confidence": 0.9974732995033264
+      },
+      {
+        "image": "002_0.png",
+        "median_seconds": 0.020398750000822474,
+        "text": "PP9710241",
+        "confidence": 0.9450049996376038
+      }
+    ],
+    "scope": "Cropped-field recognition including preprocessing and decoding. Images loaded before timing; excludes upload, barcode, cropping and the FastAPI process. Process peak includes Python, libraries, model and images. Startup is a fresh process, not a cold filesystem cache.",
+    "worker_total_seconds": 1.7360955000003742
+  }
+]

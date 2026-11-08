@@ -4,121 +4,159 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sample Scanner</title>
+<script>
+try {
+    const saved = localStorage.getItem("scanner-theme");
+    const theme = saved === "dark" || saved === "light" ? saved
+        : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.dataset.theme = theme;
+} catch (_) {}
+</script>
 <style>
 * { box-sizing:border-box; }
+:root {
+    color-scheme:light;
+    --bg:#e8eef4; --text:#072b4e; --surface:#fff; --shadow:0 2px 10px #072b4e24;
+    --metric:#e7f3e4; --focus:#f9fafb; --image:#fff;
+    --accent:#0c5509; --on-accent:#fff; --soft:#d7ead3; --soft-text:#0c5509;
+    --muted:#334155; --danger:#9f1239; --line:#cbd5e1; --field-border:#94a3b8;
+    --bad-border:#be123c; --bad-bg:#fff1f2; --readonly:#e2e8f0; --placeholder:#64748b;
+    --choice:#f3f7f2; --ok:#0c5509; --input:#fff; --link:#0c5509;
+}
+html[data-theme="dark"] {
+    color-scheme:dark;
+    --bg:#041525; --text:#f9fafb; --surface:#072b4e; --shadow:0 2px 12px #000a;
+    --metric:#0e3d16; --focus:#0a223c; --image:#041525;
+    --accent:#3f9a34; --on-accent:#f9fafb; --soft:#14361c; --soft-text:#c6ebc0;
+    --muted:#cbd5e1; --danger:#fda4af; --line:#1e4a73; --field-border:#3d6a94;
+    --bad-border:#fb7185; --bad-bg:#3f1d2a; --readonly:#061c33; --placeholder:#94a3b8;
+    --choice:#0a3358; --ok:#86efac; --input:#061c33; --link:#86efac;
+}
 body {
-    font:17px Arial,sans-serif; background:#f3f5f8; color:#172334;
+    font:17px Arial,sans-serif; background:var(--bg); color:var(--text);
     max-width:850px; margin:20px auto; padding:0 14px;
 }
+a { color:var(--link); }
 .toolbar,.card {
-    background:white; padding:20px; border-radius:12px; margin-bottom:18px;
+    background:var(--surface); padding:20px; border-radius:12px; margin-bottom:18px;
 }
-.toolbar { position:sticky; top:0; z-index:5; box-shadow:0 2px 8px #0001; }
+.toolbar { position:sticky; top:0; z-index:5; box-shadow:var(--shadow); padding:12px 14px; }
+.toolbar h1 { font-size:22px; }
+.title-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.brand { display:flex; align-items:center; gap:12px; min-width:0; }
+.brand img { height:42px; width:auto; background:#fff; border-radius:8px; padding:3px; }
+.title-row h1 { margin:0; color:var(--text); }
+.photo-grid { display:flex; gap:8px; overflow:auto; margin:6px 0; }
+.photo-grid img { height:64px; width:64px; object-fit:cover; border-radius:6px; background:var(--image); }
+.metrics { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.metric { flex:1 1 140px; padding:8px 10px; background:var(--metric); border-radius:8px; }
+.metric strong { display:block; font-size:20px; margin:2px 0; }
+.metric p { margin:0; }
+.focus-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; margin:14px 0; padding:12px; background:var(--focus); border-radius:8px; }
+.field-crop { width:100%; max-height:160px; object-fit:contain; background:var(--image); }
+.crop-originals { display:grid; gap:10px; }
+.crop-originals a { display:block; font-size:14px; }
+.crop-originals img { display:block; width:100%; max-height:200px; object-fit:contain; background:var(--image); }
+.startup-choice { padding:16px; border:2px solid var(--accent); border-radius:10px; margin:12px 0; background:var(--choice); }
 h1,h2 { margin-top:0; }
 button,.button {
     display:inline-block; padding:13px 18px; margin:5px 5px 5px 0;
     border:0; border-radius:7px; font:inherit; cursor:pointer;
     text-decoration:none; text-align:center;
 }
-button { background:#1763c6; color:white; }
-.button { background:#e6eefb; color:#174d94; }
+button { background:var(--accent); color:var(--on-accent); }
+.button,button.theme-toggle { background:var(--soft); color:var(--soft-text); }
+button.theme-toggle { margin:0; flex:0 0 auto; }
 button:disabled,.disabled { opacity:.5; cursor:default; }
-.muted { color:#58677a; font-size:14px; line-height:1.5; }
-.error { color:#b02020; }
+.muted { color:var(--muted); font-size:14px; line-height:1.5; }
+.error { color:var(--danger); }
 .status { white-space:pre-wrap; overflow-wrap:anywhere; }
-.preview { width:100%; height:auto; border:1px solid #d4dce5; }
+.preview { width:100%; height:auto; border:1px solid var(--line); }
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.camera-preview {
-    display:block; width:100%; max-height:65vh; margin:12px 0;
-    background:#101820; border:1px solid #d4dce5;
-}
-.camera-frame { position:relative; margin:12px 0; }
-.camera-frame .camera-preview { margin:0; }
-.camera-guide {
-    position:absolute; left:35%; top:12%; width:30%; height:76%;
-    border:3px dashed #f8fafc; border-radius:18px; pointer-events:none;
-    box-shadow:0 0 0 1px #172334;
-}
-.camera-guide.ready { border-color:#22c55e; }
-.auto-control { display:block; margin:10px 0; }
-.photo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
-.photo-item { min-width:0; margin:0; padding:8px; border:1px solid #d4dce5; border-radius:8px; }
-.photo-item img { display:block; width:100%; height:auto; }
-.photo-item figcaption { margin-top:6px; font-size:14px; }
-.field { width:100%; padding:11px; margin:6px 0; font:inherit;
-         border:1px solid #aeb8c6; border-radius:6px; }
-.field.bad { border:2px solid #dc2626; background:#fff1f2; }
-.field[readonly] { background:#f1f3f6; }
-.field::placeholder { color:#687587; opacity:1; }
-.help { color:#b02020; font-size:13px; margin:0 0 8px; }
-.confirm { display:block; padding:14px; margin:14px 0 5px; background:#eef4ff; }
+.field { width:100%; padding:11px; margin:6px 0; font:inherit; color:var(--text);
+         background:var(--input); border:1px solid var(--field-border); border-radius:6px; }
+.field.bad { border:2px solid var(--bad-border); background:var(--bad-bg); }
+.field[readonly] { background:var(--readonly); }
+.field::placeholder { color:var(--placeholder); opacity:1; }
+.help { color:var(--danger); font-size:13px; margin:0 0 8px; }
+.confirm { display:block; padding:14px; margin:14px 0 5px; background:var(--metric); }
 .confirm input { width:22px; height:22px; vertical-align:middle; margin-right:8px; }
-.card.confirmed { border:2px solid #278347; }
+.card.confirmed { border:2px solid var(--ok); }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
-@media(max-width:600px) { .grid { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+    .grid { grid-template-columns:1fr; }
+    .brand img { height:42px; }
+}
 </style>
 </head>
 <body>
 <div class="toolbar">
-    <h1>Sample Scanner</h1>
+    <div class="title-row">
+        <div class="brand">
+            <img src="/static/mrg-logo.jpg" alt="MRG Laboratories">
+            <h1>Sample Scanner</h1>
+        </div>
+        <button id="theme" class="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+    </div>
+    <div id="session-choice" class="startup-choice" hidden role="dialog" aria-labelledby="session-choice-title">
+        <h2 id="session-choice-title">Resume an unfinished session?</h2>
+        <label>Unfinished session<select id="unfinished-sessions" class="field"></select></label>
+        <button id="resume-session" type="button">Resume selected session</button>
+        <button id="new-session" type="button">Start new session</button>
+    </div>
+    <input id="photos" type="file"
+        accept="image/jpeg,image/png,image/webp,.zip,application/zip,application/x-zip-compressed" multiple hidden>
+    <input id="iphone-camera" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+    <button id="take-iphone-photo" class="theme-toggle" type="button">Take photo</button>
+    <button id="upload" type="button">Upload samples</button>
+    <button id="clear-photos" class="theme-toggle" type="button" hidden>Clear photos</button>
+    <p id="photo-count" class="muted" hidden></p>
+    <div id="photo-previews" class="photo-grid"></div>
     <a id="download" class="button" hidden>Download current CSV</a>
-    <label style="display:block;margin:12px 0;font-size:15px;">
+    <button id="finish-export" type="button" hidden>Download CSV & finish session</button>
+    <label style="display:block;margin:6px 0;font-size:15px;">
     <input id="include-unreviewed" type="checkbox">
     Include unreviewed samples in CSV
 </label>
 <p id="queue" role="status" aria-live="polite"></p>
+    <div class="metrics" role="status" aria-live="polite">
+        <div class="metric">Average processing / tube
+            <strong id="average-time">—</strong>
+            <p id="average-detail" class="muted">No timed tubes yet.</p>
+        </div>
+        <div class="metric">Field accuracy
+            <strong id="field-accuracy">—</strong>
+            <p id="accuracy-detail" class="muted">Confirm reviewed samples to measure accuracy.</p>
+        </div>
+    </div>
+    <p class="muted">Timing leaves out upload, waiting, and review; accuracy uses confirmed fields only, and a confident reading can still be wrong.</p>
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
-    <p class="muted">
-        Prepare and upload one tube at a time. Confirm finished cards with
-        “All good”. Only confirmed tubes enter the CSV.
-    </p>
 </div>
-<section class="card" aria-labelledby="capture-heading">
-    <h2 id="capture-heading">Capture label photos</h2>
-    <p class="muted">
-        Keep the camera steady and rotate the tube by hand. Capture when the
-        label looks focused, use soft lighting to reduce glare, and overlap
-        views slightly when the label wraps around the tube.
-    </p>
-    <label for="camera-device">Camera</label>
-    <select id="camera-device" class="field" disabled>
-        <option value="">Default camera</option>
-    </select>
-    <button id="start-camera" type="button" disabled>Start camera</button>
-    <button id="stop-camera" type="button" disabled>Stop camera</button>
-    <div id="camera-frame" class="camera-frame" hidden>
-        <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
-        <div id="camera-guide" class="camera-guide" aria-hidden="true"></div>
-    </div>
-    <label class="auto-control"><input id="auto-capture" type="checkbox" checked> Auto capture when the label is centered, clear, and steady</label>
-    <button id="capture-view" type="button" disabled>Capture view</button>
-    <p id="camera-status" class="muted status" role="status" aria-live="polite">
-        Webcam preview requires HTTPS or localhost. Allow camera access when prompted.
-    </p>
-    <h3>Photos for this tube (<span id="photo-count">0</span>/8)</h3>
-    <div id="photo-previews" class="photo-grid"></div>
-    <input id="iphone-camera" type="file"
-        accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
-    <button id="take-iphone-photo" type="button" disabled>Take photo with iPhone</button>
-    <input id="photos" type="file"
-        accept="image/jpeg,image/png,image/webp" multiple hidden>
-    <button id="choose-photos" type="button" disabled>Add existing photos</button>
-    <button id="clear-photos" type="button" disabled>Clear photos</button>
-    <button id="upload" type="button" disabled>Upload sample</button>
-    <p class="muted">
-        All staged views are uploaded together as one sample. You can also add
-        existing JPG, PNG, or WebP photos.
-    </p>
+<section id="review-section" aria-labelledby="review-title">
+    <h2 id="review-title">Samples to review</h2>
+    <div id="cards"></div>
 </section>
 <div id="waiting"></div>
-<div id="cards"></div>
 
 <script>
 const $ = s => document.querySelector(s);
 const STORAGE = "scanner-review-session";
+const THEME = "scanner-theme";
+function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const dark = theme === "dark";
+    $("#theme").textContent = dark ? "Light mode" : "Dark mode";
+    $("#theme").setAttribute("aria-pressed", dark ? "true" : "false");
+}
+applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+$("#theme").onclick = () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem(THEME, next); } catch (_) {}
+    applyTheme(next);
+};
 const names = [
     ["sample_id","Sample ID"], ["date_sampled","Date Sampled"],
     ["date_received","Date Received"], ["machine","Machine"],
@@ -126,12 +164,9 @@ const names = [
     ["reference_lube","Reference Lube"]
 ];
 const cards = new Map();
-const photoQueue = [];
 let session = null, sessionId = null, bootId = null;
-let uploading = false, refreshing = false, writes = 0, initialized = false;
-let cameraStream = null, cameraStarting = false;
-let autoTimer = null, autoPrevious = null, autoCaptured = null;
-let autoStableSince = 0, autoBusy = false;
+let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
+const photoQueue = [];
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -162,7 +197,15 @@ function remember() {
     } catch (_) {}
 }
 function dateText(value) {
-    return String(value || "").trim();
+    const raw=String(value || "").trim();
+    const full=raw.match(/^(\d{1,2})\s*[/+.-]\s*(\d{1,2})\s*[/+.-]\s*(\d{2}|\d{4})$/);
+    if(full) {
+        const year=full[3].length===2?2000+Number(full[3]):Number(full[3]);
+        const formatted=`${full[1].padStart(2,"0")}/${full[2].padStart(2,"0")}/${String(year).padStart(4,"0")}`;
+        return validDate(formatted)?formatted:raw;
+    }
+    const partial=raw.match(/^(\d{1,2})\s*[/.-]\s*(\d{1,4})$/);
+    return partial?`${partial[1]}/${partial[2]}`:raw;
 }
 
 function validDate(value) {
@@ -176,11 +219,20 @@ function validReceived(value) {
     const m=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return !!m && validDate(`${m[2]}/${m[3]}/${m[1]}`);
 }
+function sampledDateIssue(sampled,received) {
+    const raw=String(sampled||"").trim();
+    if(!/^\d{1,2}\s*[/+.-]\s*\d{1,2}\s*[/+.-]\s*(\d{2}|\d{4})$/.test(raw)) return "";
+    const normalized=dateText(raw);
+    if(!validDate(normalized)) return "Date Sampled is not a valid calendar date. Check the crop.";
+    const parts=normalized.split("/");
+    return validReceived(received) && `${parts[2]}-${parts[0]}-${parts[1]}`>received
+        ? "Date Sampled is after Date Received. Check the year/digits or correct Date Received." : "";
+}
 function required(c) {
     const keys=["sample_id","date_sampled","date_received","machine","component"];
     if(c.type.value==="small") keys.push("serial_number");
     if(c.type.value==="large") keys.push("reference_lube");
-    return keys;
+    return keys.filter(key=>!(c.blankFields||[]).includes(key));
 }
 function values(c) {
     const result={};
@@ -199,8 +251,10 @@ function fieldStates(c) {
         c.inputs[key].readOnly=unused;
         if(!unused) {
             if(!fields[key] && needed.includes(key)) error="Check the label.";
-            if(key==="date_sampled" && !fields[key])
+            if(key==="date_sampled" && !fields[key] && !(c.blankFields||[]).includes(key))
                 error="Check the date as written on the label.";
+            if(key==="date_sampled" && fields[key])
+                error=sampledDateIssue(fields[key],fields.date_received);
             if(key==="date_received" && !validReceived(fields[key]))
                 error="Enter a valid received date.";
             if(key==="component" && c.type.value==="small" &&
@@ -209,30 +263,61 @@ function fieldStates(c) {
         }
         c.inputs[key].classList.toggle("bad",!!error);
         c.inputs[key].setAttribute("aria-invalid",error?"true":"false");
-        c.hints[key].textContent=error;
+        const original=String(c.ocrValues?.[key]??fields[key]).trim();
+        const corrected=key==="date_sampled"?dateText(fields[key])!==dateText(original):fields[key]!==original;
+        c.hints[key].textContent=error || (c.checkReasons?.[key]||[])
+            .filter(reason=>!fields[key] || !reason.startsWith("Missing reading"))
+            .filter(reason=>!(key==="date_sampled" && (reason.includes("after Date Received") || reason.includes("not a valid calendar date"))))
+            .filter(reason=>!corrected || !/OCR confidence|Uncertain handwriting|OCR certainty|Verify the handwritten date/.test(reason)).join(" ") ||
+            ((c.blankFields||[]).includes(key) && !fields[key]?"Detected blank — available here if you need to correct it.":"");
+        if(error && c.otherFields?.contains(c.inputs[key])) c.moreDetails.open=true;
     });
     c.el.classList.toggle("confirmed",c.check.checked && !c.dirty && !c.saveError);
 }
+function scrollToReview() {
+    const next=[...$("#cards").children].find(element=>!element.hidden);
+    const target=next||$("#review-section");
+    const toolbar=document.querySelector(".toolbar");
+    const offset=toolbar?toolbar.getBoundingClientRect().height:0;
+    window.scrollTo({top:Math.max(0,target.getBoundingClientRect().top+window.scrollY-offset-12),behavior:"smooth"});
+}
 function renderBar() {
-    $("#upload").disabled=uploading || !initialized || !photoQueue.length;
-    $("#upload").textContent=uploading?"Uploading photos…":"Upload sample";
-    $("#choose-photos").disabled=uploading || !initialized;
-    $("#clear-photos").disabled=uploading || !photoQueue.length;
-    $("#capture-view").disabled=uploading || !cameraStream || photoQueue.length>=8;
-    $("#take-iphone-photo").disabled=uploading || !initialized || photoQueue.length>=8;
-    $("#start-camera").disabled=uploading || !initialized || cameraStarting;
-    $("#stop-camera").disabled=uploading || !cameraStream;
-    $("#camera-device").disabled=uploading || !initialized;
-    const blocked=writes>0 || [...cards.values()].some(c=>c.saveError);
+    cards.forEach(c=>{
+        Object.values(c.inputs).forEach(input=>input.disabled=finishing);
+        c.type.disabled=finishing;
+        c.check.disabled=finishing || c.operations>0;
+    });
+    $("#upload").disabled=uploading || finishing || !initialized;
+    $("#upload").textContent=uploading?"Uploading…"
+        : photoQueue.length?`Upload ${photoQueue.length} photo${photoQueue.length===1?"":"s"}`
+        : "Upload samples";
+    $("#take-iphone-photo").disabled=uploading || finishing || !initialized || photoQueue.length>=8;
+    $("#clear-photos").hidden=!photoQueue.length;
+    $("#clear-photos").disabled=uploading || finishing;
+    const blocked=finishing || writes>0 || [...cards.values()].some(c=>c.saveError || c.dirty);
     if(session) {
+        const metrics=session.metrics||{};
+        const average=metrics.average_processing_seconds;
+        $("#average-time").textContent=Number.isFinite(average)?`${average.toFixed(1)}s`:"—";
+        $("#average-detail").textContent=Number.isFinite(average)
+            ? `${metrics.timed_tubes} tubes · ${average<=30?"Within":"Over"} 30s average target`
+            : "No timed tubes yet.";
+        const accuracy=metrics.field_accuracy_percent;
+        $("#field-accuracy").textContent=Number.isFinite(accuracy)?`${accuracy.toFixed(1)}%`:"—";
+        $("#accuracy-detail").textContent=Number.isFinite(accuracy)
+            ? `${metrics.correct_fields} correct / ${metrics.total_fields} fields · ${metrics.scored_tubes} confirmed tubes`
+            : "Confirm reviewed samples to measure accuracy.";
         const q=session.counts||{};
         $("#queue").textContent=
             `${q.queued||0} waiting · ${q.processing||0} processing · `+
-            `${session.ready_count||0} need review · ${session.confirmed_count||0} confirmed`;
+            `${session.ready_count||0} need review · ${session.confirmed_count||0} confirmed · ${q.duplicate||0} duplicates skipped`;
         const includeAll=$("#include-unreviewed").checked;
         const exportCount=includeAll
             ? session.saved_count
             : session.confirmed_count;
+        $("#finish-export").hidden=!exportCount;
+        $("#finish-export").disabled=blocked || uploading || !!q.queued || !!q.processing || !!q.error ||
+            (!includeAll && (session.ready_count||0)>0);
         $("#download").hidden=!exportCount;
         $("#download").classList.toggle("disabled",blocked);
         $("#download").setAttribute("aria-disabled",blocked?"true":"false");
@@ -268,6 +353,7 @@ function saveCard(c,confirmed) {
     }).catch(error=>{
         c.saveError=true;
         c.check.checked=false;
+        c.el.hidden=false;
         c.retry.hidden=false;
         c.note.textContent="Could not save: "+error.message;
     }).finally(()=>{
@@ -302,7 +388,8 @@ function addCard(job) {
     }
     if(!review?.fields || cards.has(job.record_id)) return;
     const c={
-        id:job.record_id, inputs:{}, hints:{}, version:0,
+        id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, blankFields:review.blank_fields||[],
+        ocrValues:review.original_fields||review.fields, version:0,
         dirty:false, saveError:false, operations:0,
         serverConfirmed:!!review.confirmed, tail:Promise.resolve(), timer:null
     };
@@ -313,7 +400,30 @@ function addCard(job) {
     title.textContent=review.fields.sample_id
         ? `Sample ${review.fields.sample_id}` : "Sample needs review";
     c.el.append(title);
+    if(review.source_folder) {
+        const source=document.createElement("p");
+        source.className="muted";
+        source.textContent=`Tube folder: ${review.source_folder}`;
+        c.el.append(source);
+    }
 
+    const timing=job.timing;
+    if(timing && Number.isFinite(timing.processing_seconds)) {
+        const elapsed=document.createElement("p");
+        elapsed.className="muted";
+        elapsed.textContent=`Processed in ${timing.processing_seconds.toFixed(1)} seconds`;
+        if(Number.isFinite(timing.total_seconds)) {
+            elapsed.textContent+=` · Queue ${timing.queue_seconds.toFixed(1)}s · Ready ${timing.total_seconds.toFixed(1)}s after upload`;
+            elapsed.textContent+=timing.total_seconds<=30?" · Within 30s target":" · Over 30s target";
+        }
+        elapsed.title="Starts after the server accepts the uploaded photos. Includes all photos, OCR and preview generation; excludes photo capture, upload transfer, manual review and browser refresh delay.";
+        c.el.append(elapsed);
+    }
+
+    const originals=document.createElement("details");
+    const summary=document.createElement("summary");
+    summary.textContent="View full label and original photos";
+    originals.append(summary);
     if(review.evidence) {
         const link=document.createElement("a");
         link.href=`/samples/${c.id}/evidence`;
@@ -321,30 +431,31 @@ function addCard(job) {
         const image=document.createElement("img");
         image.src=link.href; image.className="preview"; image.loading="lazy";
         image.alt="Combined label view assembled from original field crops";
-        link.append(image); c.el.append(link);
+        link.append(image); originals.append(link);
         const caption=document.createElement("p");
         caption.className="muted";
         caption.textContent="Actual field crops from the uploaded photos. Tap to enlarge.";
-        c.el.append(caption);
+        originals.append(caption);
     }
-
-    const originals=document.createElement("details");
-    const summary=document.createElement("summary");
-    summary.textContent="View original photos";
-    originals.append(summary);
     for(let n=1;n<=(review.image_count||1);n++) {
         const image=document.createElement("img");
         image.src=`/samples/${c.id}/images/${n}`;
         image.className="original"; image.loading="lazy";
         image.alt=`Original label photo ${n}`;
         originals.append(image);
-        const download=document.createElement("a");
-        download.className="button";
-        download.href=`${image.src}?download=true`;
-        download.textContent=`Download view ${n}`;
-        originals.append(download);
     }
-    c.el.append(originals);
+
+    const attention=document.createElement("div");
+    const heading=document.createElement("h3"); heading.textContent="Check these fields";
+    attention.append(heading);
+    const explanation=document.createElement("p"); explanation.className="muted";
+    explanation.textContent="Flags are hints, not a guarantee. Open the other fields to check any reading.";
+    attention.append(explanation);
+    c.el.append(attention);
+    c.moreDetails=document.createElement("details");
+    const moreTitle=document.createElement("summary"); moreTitle.textContent="View / edit other fields";
+    c.otherFields=document.createElement("div");
+    c.moreDetails.append(moreTitle,c.otherFields);
 
     const typeLabel=document.createElement("label");
     typeLabel.textContent="Label type";
@@ -356,10 +467,12 @@ function addCard(job) {
             option.value=value; option.textContent=text; c.type.append(option);
         });
     c.type.value=review.label_type||"unknown";
-    typeLabel.append(c.type); c.el.append(typeLabel);
-    const grid=document.createElement("div"); grid.className="grid";
+    typeLabel.append(c.type);
+    (review.label_type==="unknown"?attention:c.otherFields).append(typeLabel);
+    let flaggedCount=0;
 
     names.forEach(([key,text])=>{
+        const row=document.createElement("div"); row.className="focus-row";
         const wrap=document.createElement("label");
         wrap.append(document.createTextNode(text));
         const input=document.createElement("input");
@@ -385,9 +498,65 @@ function addCard(job) {
             edited(c);
         };
         c.inputs[key]=input; c.hints[key]=hint;
-        wrap.append(input,hint); grid.append(wrap);
+        wrap.append(input,hint);
+        const candidates=review.ocr_candidates?.[key]||[];
+        if(candidates.length>1) {
+            const suggestion=document.createElement("p"); suggestion.className="muted";
+            suggestion.textContent="Conflicting OCR readings: "+candidates.join(" / ");
+            wrap.append(suggestion);
+        }
+        row.append(wrap);
+        if(key!=="date_received") {
+            const link=document.createElement("a");
+            link.href=`/samples/${c.id}/fields/${key}`; link.target="_blank"; link.rel="noopener";
+            const image=document.createElement("img");
+            image.src=link.href; image.className="field-crop"; image.loading="lazy"; image.alt=`${text} label crop`;
+            image.onerror=()=>{
+                const fallback=document.createElement("div");
+                fallback.className="crop-originals";
+                const note=document.createElement("p"); note.className="muted";
+                note.textContent="No saved crop for this field. Check the tube’s photos below; tap to enlarge.";
+                fallback.append(note);
+                for(let n=1;n<=(review.image_count||1);n++) {
+                    const original=document.createElement("a");
+                    original.href=`/samples/${c.id}/images/${n}`;
+                    original.target="_blank"; original.rel="noopener";
+                    original.append(document.createTextNode(`Photo ${n}`));
+                    const photo=document.createElement("img");
+                    photo.src=original.href; photo.loading="lazy"; photo.alt=`Original photo ${n} — check ${text}`;
+                    original.append(photo); fallback.append(original);
+                }
+                link.replaceWith(fallback);
+            };
+            link.append(image); row.append(link);
+        }
+        const unused=(key==="serial_number" && review.label_type==="large") ||
+            (key==="reference_lube" && review.label_type==="small");
+        const reasons=review.field_checks?.[key];
+        const flagged=!unused && key!=="date_received" &&
+            (Array.isArray(reasons)?reasons.length>0:true);
+        if(flagged) { attention.append(row); flaggedCount++; }
+        else c.otherFields.append(row);
     });
-    c.el.append(grid);
+    if(!flaggedCount) {
+        const note=document.createElement("p"); note.className="muted";
+        note.textContent="No fields flagged. Other fields and original photos are available below.";
+        attention.append(note);
+    }
+    c.el.append(c.moreDetails,originals);
+    if(Object.entries(review.ocr_candidates||{}).some(([key,choices])=>
+        c.inputs[key] && !c.inputs[key].value && choices.length===1)) {
+        const restore=document.createElement("button");
+        restore.type="button"; restore.textContent="Fill empty boxes from OCR";
+        restore.onclick=()=>{
+            Object.entries(review.ocr_candidates||{}).forEach(([key,choices])=>{
+                if(c.inputs[key] && !c.inputs[key].value && choices.length===1)
+                    c.inputs[key].value=key==="serial_number"?choices[0].toUpperCase():choices[0];
+            });
+            edited(c); restore.hidden=true;
+        };
+        c.el.append(restore);
+    }
 
     const label=document.createElement("label");
     label.className="confirm";
@@ -409,6 +578,8 @@ function addCard(job) {
             if(c.type.value==="unknown") error="Choose Small or Large.";
             else if(!validReceived(fields.date_received))
                 error="Enter a valid Date Received.";
+            else if(sampledDateIssue(fields.date_sampled,fields.date_received))
+                error=sampledDateIssue(fields.date_sampled,fields.date_received);
             else if(c.type.value==="small" && fields.component &&
                     !/^[1-6] (GS|NGS)$/.test(fields.component))
                 error="Small-label Component must look like 4 GS.";
@@ -416,15 +587,15 @@ function addCard(job) {
                 c.check.checked=false; c.note.textContent=error;
                 fieldStates(c); return;
             }
-            const missing=required(c).filter(key=>!fields[key]);
-            if(missing.length && !confirm(
-                "Some fields are blank. Confirm that these should stay blank?"
-            )) { c.check.checked=false; return; }
+            c.el.hidden=true;
+            requestAnimationFrame(scrollToReview);
         }
         c.version++; c.dirty=true;
         saveCard(c,c.check.checked);
     };
     c.type.onchange=()=>{
+        c.blankFields=[];
+        c.moreDetails.open=true;
         if(c.type.value==="small") c.inputs.reference_lube.value="";
         if(c.type.value==="large") c.inputs.serial_number.value="";
         edited(c);
@@ -442,10 +613,24 @@ function renderSession() {
     if(!session) return;
     (session.jobs||[]).forEach(job=>{
         if(job.state==="done") { addCard(job); return; }
-        const row=document.createElement("p");
+        const row=document.createElement("div");
         row.className="muted";
         row.textContent=`Upload ${job.record_id.slice(0,6)} — `+
-            ({queued:"waiting",processing:"processing",error:"failed"}[job.state]||job.state);
+            ({queued:"waiting",processing:"processing",error:"failed",duplicate:"duplicate skipped"}[job.state]||job.state);
+        if(job.state==="duplicate") {
+            row.append(document.createTextNode(` (${job.duplicate_reason||"same sample"}; first record kept)`));
+            if(job.duplicate_conflicts?.length) {
+                row.append(document.createTextNode(". OCR readings differed — compare these photos before finalizing."));
+                const details=document.createElement("details");
+                const summary=document.createElement("summary");summary.textContent="Compare duplicate photos";
+                details.append(summary);
+                for(let n=1;n<=(job.review?.image_count||1);n++) {
+                    const image=document.createElement("img");image.src=`/samples/${job.record_id}/images/${n}`;
+                    image.className="original";image.loading="lazy";image.alt=`Duplicate original photo ${n}`;details.append(image);
+                }
+                row.append(details);
+            }
+        }
         if(job.state==="error") {
             row.append(document.createTextNode(": "+(job.error||"Could not read")));
             const retry=document.createElement("button");
@@ -463,10 +648,13 @@ function renderSession() {
     });
 }
 async function refresh() {
-    if(!sessionId || refreshing) return;
+    if(!sessionId || refreshing || finishing) return;
     refreshing=true;
+    const requestedSession=sessionId;
     try {
-        session=await api(`/sessions/${sessionId}`);
+        const updated=await api(`/sessions/${requestedSession}`);
+        if(sessionId!==requestedSession || finishing) return;
+        session=updated;
         $("#connection").textContent="";
         renderSession();
     } catch(error) {
@@ -481,312 +669,188 @@ async function ensureSession() {
     }));
     sessionId=session.id; remember(); renderSession();
 }
+$("#include-unreviewed").onchange=renderBar;
+
+$("#finish-export").onclick=async()=>{
+    if(finishing || uploading || writes || [...cards.values()].some(c=>c.dirty || c.saveError)) return;
+    if(!confirm("Download the current CSV and finish this session? This deletes this session’s uploaded photos and crop files. Your browser receives the CSV first; keep the downloaded file.")) return;
+    finishing=true; renderBar();
+    try {
+        const includeAll=$("#include-unreviewed").checked;
+        const response=await fetch(`/sessions/${sessionId}/csv?include_unreviewed=${includeAll}`,{cache:"no-store"});
+        if(!response.ok) throw new Error("CSV download failed; photos were not cleared.");
+        const hash=response.headers.get("X-Export-Hash");
+        if(!hash) throw new Error("Missing export receipt; photos were not cleared.");
+        const blob=await response.blob();
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement("a"); link.href=url; link.download=`samples-${sessionId}.csv`;
+        document.body.append(link); link.click(); link.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
+        const result=await api(`/sessions/${sessionId}/finish-export`,post({export_hash:hash,include_unreviewed:includeAll}));
+        cards.forEach(c=>clearTimeout(c.timer)); cards.clear(); $("#cards").replaceChildren();
+        session=null; sessionId=null;
+        try { sessionStorage.removeItem(STORAGE); } catch(_) {}
+        await ensureSession();
+        say(`CSV sent to your downloads. Cleared ${result.cleared_tubes} tubes’ photos and crops. Ready for a new session.`);
+    } catch(error) {
+        say(error.message+" Saved CSV field records are retained on the Pi.",true);
+    } finally { finishing=false; renderBar(); }
+};
+
 function renderPhotoQueue() {
-    $("#photo-count").textContent=photoQueue.length;
+    const count=$("#photo-count");
+    count.hidden=!photoQueue.length;
+    count.textContent=photoQueue.length?`${photoQueue.length}/8 photos for this tube. Take another view, then upload.` : "";
     const gallery=$("#photo-previews");
     gallery.replaceChildren();
-    photoQueue.forEach((photo,index)=>{
-        const figure=document.createElement("figure");
-        figure.className="photo-item";
+    photoQueue.forEach(photo=>{
         const image=document.createElement("img");
         image.src=photo.previewUrl;
-        image.alt=`Staged label view ${index+1}`;
-        const caption=document.createElement("figcaption");
-        caption.textContent=`View ${index+1}`;
-        const download=document.createElement("a");
-        download.className="button";
-        download.href=photo.previewUrl;
-        download.download=photo.file.name||`label_view_${index+1}.jpg`;
-        download.textContent="Download";
-        const remove=document.createElement("button");
-        remove.type="button";
-        remove.textContent="Remove";
-        remove.setAttribute("aria-label",`Remove view ${index+1}`);
-        remove.onclick=()=>{
-            const [removed]=photoQueue.splice(index,1);
-            URL.revokeObjectURL(removed.previewUrl);
-            renderPhotoQueue();
-            renderBar();
-        };
-        figure.append(image,caption,download,remove);
-        gallery.append(figure);
+        image.alt="Phone photo for this tube";
+        gallery.append(image);
     });
+    renderBar();
 }
-function addPhotos(files) {
-    if(photoQueue.length+files.length>8)
-        return say("Maximum 8 photos of one tube.",true);
+function clearPhotos() {
+    photoQueue.forEach(photo=>URL.revokeObjectURL(photo.previewUrl));
+    photoQueue.length=0;
+    renderPhotoQueue();
+}
+function addPhonePhotos(files) {
+    if(photoQueue.length+files.length>8) return say("Maximum 8 photos of one tube.",true);
     for(const file of files) {
         if(!["image/jpeg","image/png","image/webp"].includes(file.type))
             return say("Use JPG, PNG, or WebP. On iPhone, use Camera → Formats → Most Compatible.",true);
         if(!file.size || file.size>10*1024*1024)
             return say("Each photo must be nonempty and 10 MB or smaller.",true);
     }
-    files.forEach(file=>photoQueue.push({
-        file, previewUrl:URL.createObjectURL(file)
-    }));
+    files.forEach(file=>photoQueue.push({file, previewUrl:URL.createObjectURL(file)}));
     renderPhotoQueue();
-    renderBar();
-    say(`${files.length} photo${files.length===1?"":"s"} added. Capture or add more views, then upload this tube.`);
+    say(`${photoQueue.length}/8 photos ready. Take another view or upload this tube.`);
 }
-function clearPhotos() {
-    photoQueue.forEach(photo=>URL.revokeObjectURL(photo.previewUrl));
-    photoQueue.length=0;
-    renderPhotoQueue();
-    renderBar();
-}
-async function loadCameraDevices(activeDeviceId) {
-    const devices=await navigator.mediaDevices.enumerateDevices();
-    const select=$("#camera-device");
-    const options=[new Option("Default camera","")];
-    devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>{
-        options.push(new Option(device.label||`Camera ${index+1}`,device.deviceId));
-    });
-    select.replaceChildren(...options);
-    select.value=activeDeviceId||"";
-}
-function stopCamera(updateStatus=true) {
-    clearInterval(autoTimer);
-    autoTimer=null; autoPrevious=null; autoCaptured=null;
-    autoStableSince=0;
-    $("#camera-guide").classList.remove("ready");
-    if(cameraStream) cameraStream.getTracks().forEach(track=>track.stop());
-    cameraStream=null;
-    $("#camera-preview").srcObject=null;
-    $("#camera-frame").hidden=true;
-    renderBar();
-    if(updateStatus) $("#camera-status").textContent="Camera stopped.";
-}
-async function startCamera(deviceId="") {
-    if(cameraStarting) return;
-    if(!navigator.mediaDevices?.getUserMedia) {
-        $("#camera-status").textContent=
-            "This page cannot access a webcam. Open it over HTTPS or from localhost, then allow camera access.";
-        return;
-    }
-    cameraStarting=true;
-    stopCamera(false);
-    try {
-        const video={
-            width:{ideal:1280}, height:{ideal:720}
-        };
-        if(deviceId) video.deviceId={exact:deviceId};
-        cameraStream=await navigator.mediaDevices.getUserMedia({
-            video, audio:false
-        });
-        const preview=$("#camera-preview");
-        preview.srcObject=cameraStream;
-        $("#camera-frame").hidden=false;
-        await preview.play();
-        let deviceLoadMessage="";
-        try {
-            const activeId=cameraStream.getVideoTracks()[0].getSettings().deviceId;
-            await loadCameraDevices(activeId);
-        } catch(error) {
-            deviceLoadMessage=
-                `Preview started, but camera selection could not be loaded: ${error.message}`;
-        }
-        $("#camera-status").textContent=deviceLoadMessage ||
-            "Center the label inside the guide and hold the tube steady.";
-        autoTimer=setInterval(checkAutoCapture,250);
-    } catch(error) {
-        stopCamera(false);
-        $("#camera-status").textContent=
-            error.name==="NotAllowedError"
-                ? "Camera access was denied. Allow camera access in your browser and try again."
-                : error.name==="NotFoundError"
-                    ? "No camera was found. Connect the Logitech camera and try again."
-                    : `Could not start the camera: ${error.message}`;
-    } finally {
-        cameraStarting=false;
-        renderBar();
-    }
-}
-$("#include-unreviewed").onchange=renderBar;
-
-$("#start-camera").onclick=()=>startCamera($("#camera-device").value);
-$("#stop-camera").onclick=()=>stopCamera();
-$("#camera-device").onchange=()=>{
-    if(cameraStream) startCamera($("#camera-device").value);
-};
-$("#auto-capture").onchange=()=>{
-    autoPrevious=null; autoCaptured=null; autoStableSince=0;
-    $("#camera-guide").classList.remove("ready");
-    if(cameraStream) $("#camera-status").textContent=$("#auto-capture").checked
-        ? "Auto capture on. Center the label and hold it steady."
-        : "Auto capture off. Use Capture view when ready.";
-};
-function cameraSample() {
-    const preview=$("#camera-preview");
-    if(!cameraStream || !preview.videoWidth || !preview.videoHeight) return null;
-    const canvas=document.createElement("canvas");
-    canvas.width=160; canvas.height=90;
-    const context=canvas.getContext("2d",{willReadFrequently:true});
-    if(!context) return null;
-    context.drawImage(preview,0,0,160,90);
-    const pixels=context.getImageData(0,0,160,90).data;
-    const gray=new Uint8Array(160*90);
-    for(let i=0;i<gray.length;i++)
-        gray[i]=(pixels[4*i]*77+pixels[4*i+1]*150+pixels[4*i+2]*29)>>8;
-    return gray;
-}
-function centerDifference(a,b) {
-    let total=0, count=0;
-    for(let y=14;y<76;y+=2) for(let x=56;x<104;x+=2) {
-        total+=Math.abs(a[y*160+x]-b[y*160+x]); count++;
-    }
-    return total/count;
-}
-function labelDetail(gray) {
-    let center=0, sides=0, centerCount=0, sideCount=0;
-    for(let y=15;y<75;y+=2) for(let x=20;x<140;x+=2) {
-        const p=y*160+x;
-        const edge=Math.abs(gray[p]-gray[p+1])+
-            Math.abs(gray[p]-gray[p+160]);
-        if(x>=56 && x<104) { center+=edge; centerCount++; }
-        else if((x>=20 && x<48) || (x>=112 && x<140)) {
-            sides+=edge; sideCount++;
-        }
-    }
-    const centerMean=center/centerCount;
-    return centerMean>12 && centerMean>sides/sideCount*1.35;
-}
-function checkAutoCapture() {
-    if(!$("#auto-capture").checked || !cameraStream || uploading ||
-       autoBusy || photoQueue.length>=8 || document.hidden) return;
-    const sample=cameraSample();
-    if(!sample) return;
-    const detailed=labelDetail(sample);
-    const moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
-    autoPrevious=sample;
-    if(!detailed || moving) {
-        autoStableSince=0;
-        $("#camera-guide").classList.remove("ready");
-        $("#camera-status").textContent=detailed
-            ? "Hold the tube steady inside the guide…"
-            : "Center the printed label inside the guide and bring it into focus.";
-        return;
-    }
-    if(autoCaptured) {
-        if(centerDifference(sample,autoCaptured)<5.5) {
-            $("#camera-status").textContent="View captured. Rotate the tube for another view.";
-            return;
-        }
-        autoCaptured=null;
-    }
-    if(!autoStableSince) autoStableSince=Date.now();
-    $("#camera-guide").classList.add("ready");
-    $("#camera-status").textContent="Label looks clear. Keep it steady…";
-    if(Date.now()-autoStableSince<1200) return;
-    autoBusy=true;
-    captureView(true).finally(()=>{
-        autoCaptured=sample;
-        autoStableSince=0;
-        autoBusy=false;
-    });
-}
-function captureView(automatic=false) {
-    const preview=$("#camera-preview");
-    if(uploading || photoQueue.length>=8 || !cameraStream ||
-       !preview.videoWidth || !preview.videoHeight) {
-        $("#camera-status").textContent="Wait for the camera preview to become ready.";
-        return Promise.resolve(false);
-    }
-    const canvas=document.createElement("canvas");
-    canvas.width=preview.videoWidth;
-    canvas.height=preview.videoHeight;
-    const context=canvas.getContext("2d");
-    if(!context) {
-        $("#camera-status").textContent="Could not prepare an image for capture.";
-        return Promise.resolve(false);
-    }
-    context.drawImage(preview,0,0,canvas.width,canvas.height);
-    return new Promise(resolve=>canvas.toBlob(blob=>{
-        if(!blob) {
-            $("#camera-status").textContent="Could not capture this view. Try again.";
-            resolve(false); return;
-        }
-        addPhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{
-            type:"image/jpeg", lastModified:Date.now()
-        })]);
-        if(automatic) $("#camera-status").textContent=
-            "Photo captured automatically. Rotate the tube for the next view.";
-        resolve(true);
-    },"image/jpeg",0.95));
-}
-$("#capture-view").onclick=()=>{
-    autoCaptured=cameraSample();
-    autoStableSince=0;
-    captureView();
-};
-$("#choose-photos").onclick=()=>{
-    if(uploading || !initialized) return;
-    $("#photos").value="";
-    $("#photos").click();
-};
-$("#take-iphone-photo").onclick=()=>{
-    if(uploading || !initialized || photoQueue.length>=8) return;
-    $("#iphone-camera").value="";
-    $("#iphone-camera").click();
-};
-$("#clear-photos").onclick=clearPhotos;
-$("#upload").onclick=async()=>{
-    if(uploading || !initialized || !photoQueue.length) return;
-    const files=photoQueue.map(photo=>photo.file);
+async function uploadPhotoFiles(files) {
     uploading=true; renderBar(); say("Uploading…");
     try {
         await ensureSession();
         const form=new FormData();
-        files.forEach(file=>form.append("files",file,file.name));
+        files.forEach(file=>form.append("files",file));
         form.append("session_id",sessionId);
         form.append("date_received",today());
         await api("/upload",{method:"POST",body:form});
         clearPhotos();
-        say("Queued. You can capture the next tube.");
+        say("Queued. You can photograph the next tube.");
         await refresh();
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
     } finally {
-        uploading=false; renderBar();
+        uploading=false; $("#photos").value=""; renderBar();
     }
-};
-$("#photos").onchange=()=>{
-    const files=Array.from($("#photos").files);
-    if(files.length && !uploading) addPhotos(files);
-    $("#photos").value="";
+}
+$("#take-iphone-photo").onclick=()=>{
+    if(uploading || finishing || !initialized || photoQueue.length>=8) return;
+    $("#iphone-camera").value="";
+    $("#iphone-camera").click();
 };
 $("#iphone-camera").onchange=()=>{
     const files=Array.from($("#iphone-camera").files);
-    if(files.length && !uploading) addPhotos(files);
+    if(files.length && !uploading && !finishing) addPhonePhotos(files);
     $("#iphone-camera").value="";
 };
+$("#clear-photos").onclick=clearPhotos;
+$("#upload").onclick=()=>{
+    if(uploading || finishing || !initialized) return;
+    if(photoQueue.length) return uploadPhotoFiles(photoQueue.map(photo=>photo.file));
+    $("#photos").value=""; $("#photos").click();
+};
+$("#photos").onchange=async()=>{
+    const files=Array.from($("#photos").files);
+    if(!files.length || uploading || finishing) return;
+    const archives=files.filter(file=>file.name.toLowerCase().endsWith(".zip") ||
+        ["application/zip","application/x-zip-compressed"].includes(file.type));
+    if(archives.length) {
+        if(files.length!==1) return say("Choose one ZIP by itself, or photos of one tube. Don’t mix ZIPs and photos.",true);
+        await uploadArchive(archives[0]);
+        return;
+    }
+    if(files.length>8) return say("Maximum 8 photos of one tube.",true);
+    for(const file of files) {
+        if(!["image/jpeg","image/png","image/webp"].includes(file.type))
+            return say("Use JPG, PNG, or WebP. On iPhone, use Camera → Formats → Most Compatible.",true);
+        if(!file.size || file.size>10*1024*1024)
+            return say("Each photo must be nonempty and 10 MB or smaller.",true);
+    }
+    await uploadPhotoFiles(files);
+};
+async function uploadArchive(file) {
+    if(!file || uploading) return;
+    if(!file.size || file.size>250*1024*1024) return say("ZIP must be nonempty and no larger than 250 MB.",true);
+    uploading=true; renderBar(); say("Uploading and checking tube folders…");
+    try {
+        await ensureSession();
+        const form=new FormData();
+        form.append("archive",file);
+        form.append("session_id",sessionId);
+        form.append("date_received",today());
+        const result=await api("/upload-batch",{method:"POST",body:form});
+        say(`${result.queued_samples} tubes added to this session; identical uploads are skipped. You can upload more while they process.`);
+        await refresh();
+    } catch(error) {
+        say(error.message+"\nIf the connection failed, check the queue before uploading the ZIP again.",true);
+    } finally {
+        uploading=false; $("#photos").value=""; renderBar();
+    }
+}
 window.addEventListener("beforeunload",event=>{
     if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
     }
 });
-window.addEventListener("pagehide",()=>stopCamera(false));
 async function initialize() {
     renderBar();
     try {
         const app=await api("/app"); bootId=app.boot_id;
         let saved=null;
         try { saved=JSON.parse(sessionStorage.getItem(STORAGE)||"null"); } catch(_) {}
-        if(saved?.boot===bootId && saved.session) {
-            sessionId=saved.session;
-            await refresh();
-        } else {
-            try { sessionStorage.removeItem(STORAGE); } catch(_) {}
+        const unfinished=await api("/sessions");
+        if(unfinished.sessions?.length) {
+            const select=$("#unfinished-sessions"); select.replaceChildren();
+            unfinished.sessions.forEach(previous=>{
+                const option=document.createElement("option"); option.value=previous.id;
+                option.textContent=`${previous.name} · ${previous.tubes} tubes · ${previous.done} processed · ${previous.queued+previous.processing} waiting/processing`;
+                select.append(option);
+            });
+            if(unfinished.sessions.some(previous=>previous.id===saved?.session)) select.value=saved.session;
+            $("#session-choice").hidden=false;
+            say("Choose a session above before uploading.");
+            return;
         }
+        try { sessionStorage.removeItem(STORAGE); } catch(_) {}
         initialized=true;
-        say(sessionId?"Current session restored.":"Ready for a fresh scanning session.");
+        say("Ready for a fresh scanning session.");
     } catch(error) {
         say("Could not connect. Refresh the page to retry.\n"+error.message,true);
     }
     renderBar();
-    renderPhotoQueue();
 }
+async function chooseSession(resume) {
+    $("#resume-session").disabled=true; $("#new-session").disabled=true;
+    try {
+        const selected=resume
+            ? await api(`/sessions/${$("#unfinished-sessions").value}`)
+            : await api("/sessions",post({name:"Samples "+new Date().toLocaleString()}));
+        if(selected.finished_at) throw new Error("That session has finished. Refresh to choose another.");
+        session=selected; sessionId=selected.id; remember();
+        initialized=true; $("#session-choice").hidden=true;
+        renderSession(); say(resume?"Unfinished session resumed.":"New session started. Your older session is preserved.");
+    } catch(error) { say(error.message,true); }
+    finally {
+        $("#resume-session").disabled=false; $("#new-session").disabled=false; renderBar();
+    }
+}
+$("#resume-session").onclick=()=>chooseSession(true);
+$("#new-session").onclick=()=>chooseSession(false);
 initialize();
-setInterval(refresh,1000);
+setInterval(refresh,2500);
 </script>
 <!-- review-export-v11 -->
 </body>

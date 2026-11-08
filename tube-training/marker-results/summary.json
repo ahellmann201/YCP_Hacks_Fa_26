@@ -1,0 +1,54 @@
+{
+  "training_crops": 44,
+  "existing_validation_fields": 9,
+  "baseline_raw_correct": 5,
+  "baseline_cer": 0.10714285714285714,
+  "results": [
+    {
+      "experiment": "marker_head",
+      "epochs": 10,
+      "validation_fields": 9,
+      "raw_correct": 5,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.10714285714285714,
+      "marker_development_fields": 2,
+      "marker_development_raw_correct": 0,
+      "marker_predictions": [
+        {
+          "field": "machine",
+          "expected": "27",
+          "prediction": "37 "
+        },
+        {
+          "field": "date_sampled",
+          "expected": "4.13.26",
+          "prediction": "4.13-34"
+        }
+      ]
+    },
+    {
+      "experiment": "marker_partial",
+      "epochs": 10,
+      "validation_fields": 9,
+      "raw_correct": 5,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.10714285714285714,
+      "marker_development_fields": 2,
+      "marker_development_raw_correct": 0,
+      "marker_predictions": [
+        {
+          "field": "machine",
+          "expected": "27",
+          "prediction": "37 "
+        },
+        {
+          "field": "date_sampled",
+          "expected": "4.13.26",
+          "prediction": "4.13-34"
+        }
+      ]
+    }
+  ],
+  "decision": "No deployment: no measured recognition gain, reference marker dates still misread.",
+  "limitations": "Existing human-reviewed and assistant-transcribed labels retained; only a few thick-marker-style examples. Nine-field validation is repeatedly used development data. Two extra reference fields are visually transcribed development checks, not independent final testing and never used for training."
+}

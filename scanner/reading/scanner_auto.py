@@ -6,6 +6,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scanner.reading.ocr_settings import ocr_threads, rapidocr_parameters
+from scanner.reading.field_text import strip_heading, visually_empty
+from scanner.reading.reading_quality import crop_quality
+from scanner.reading.sample_dates import extract_written_date
+
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
@@ -33,6 +41,7 @@ FIELDS = [
 
 TEMPLATES = {
     "small": {
+        "layout": "small",
         "size": (1200, 680),
         "barcode": (0.18, 0.02, 0.79, 0.25),
         "fields": {
@@ -42,6 +51,7 @@ TEMPLATES = {
         },
     },
     "large": {
+        "layout": "large",
         "size": (1200, 330),
         "barcode": (0.47, 0.65, 0.85, 0.91),
         "fields": {
@@ -93,19 +103,10 @@ def identify_type(text):
 
 
 def valid_written_date(text):
-    # Accept partial or full numeric dates without interpreting them.
-    # Examples: 10/26, 9/28/26, 09/28/2026.
-    match = re.search(
-        r"(?<!\d)\d{1,4}\s*[/.-]\s*\d{1,4}"
-        r"(?:\s*[/.-]\s*\d{1,4})?(?!\d)",
-        str(text),
-    )
-    if not match:
-        return ""
-    return re.sub(r"\s+", "", match.group())
+    return extract_written_date(text)
 
 
-def read_text(engine, image, line=False):
+def read_text(engine, image, line=False, confidence=None):
     result = engine(
         image,
         use_det=not line,
@@ -113,6 +114,10 @@ def read_text(engine, image, line=False):
         use_rec=True,
     )
 
+    if confidence is not None:
+        scores = getattr(result, 'scores', None)
+        if scores is not None:
+            confidence.extend(float(score) for score in scores)
     if result.txts is None:
         return []
 
@@ -157,7 +162,7 @@ def raw_values(text, label_type):
         match = re.search(pattern, text, re.I)
 
         if match:
-            values[name] = clean(match.group(1))
+            values[name] = strip_heading(clean(match.group(1)),name,label_type)
 
     match = re.search(
         r"\bDate\s*:?\s*(.*)",
@@ -173,7 +178,7 @@ def raw_values(text, label_type):
     return values
 
 
-def align_to_template(image, barcode, template):
+def align_to_template(image, barcode, template, metadata=None):
     import cv2
     import numpy as np
 
@@ -182,6 +187,7 @@ def align_to_template(image, barcode, template):
 
     # Extend the canvas without moving the original template coordinates.
     canvas_width = round(template_width * 1.12)
+    canvas_height=round(height*1.12) if template.get('layout')=='small' else height
 
     position = barcode.position
 
@@ -208,11 +214,24 @@ def align_to_template(image, barcode, template):
         source,
         destination,
     )
+    method = 'barcode'
+    if template.get('layout') == 'large':
+        from scanner.vision.label_alignment import tight_large_transform
+        framed = tight_large_transform(image, barcode, template)
+        if framed is not None:
+            transform = framed
+            method = 'tight_large_label'
+    if metadata is not None:
+        metadata['alignment_method'] = method
+        corners = cv2.perspectiveTransform(source.reshape(1,4,2),transform)[0]
+        x1,y1 = corners.min(axis=0); x2,y2 = corners.max(axis=0)
+        metadata['barcode_box'] = [max(0,int(x1)-6),max(0,int(y1)-6),
+                                   min(canvas_width,int(x2)+7),min(height,int(y2)+7)]
 
     aligned = cv2.warpPerspective(
         image,
         transform,
-        (canvas_width, height),
+        (canvas_width, canvas_height),
         borderValue=(255, 255, 255),
     )
 
@@ -225,7 +244,7 @@ def align_to_template(image, barcode, template):
     coverage = cv2.warpPerspective(
         original_mask,
         transform,
-        (canvas_width, height),
+        (canvas_width, canvas_height),
         flags=cv2.INTER_NEAREST,
         borderValue=0,
     )
@@ -246,13 +265,21 @@ def prepare_field_crop(
     field,
     region,
     warnings,
+    barcode_box=None,
+    refine=True,
 ):
     import numpy as np
 
-    height = aligned.shape[0]
+    height = template['size'][1]
 
     # Use the original template width, not the expanded canvas width.
     width = template["size"][0]
+
+    if field=='serial_number':
+        from scanner.vision.crop_adjustments import extend_serial_region
+        region,extended=extend_serial_region(aligned,template,region)
+        if extended:
+            warnings.append('serial_number: crop widened because ink reached its right edge; verify the final characters.')
 
     x1, y1, x2, y2 = region
 
@@ -260,6 +287,11 @@ def prepare_field_crop(
     top = max(0, round(y1 * height))
     right = min(aligned.shape[1], round(x2 * width))
     bottom = min(aligned.shape[0], round(y2 * height))
+
+    if field=='date_sampled' and barcode_box:
+        bx1,by1,_,by2=barcode_box
+        if min(bottom,by2)-max(top,by1)>max(2,(bottom-top)*.10) and bx1>left+50:
+            right=min(right,bx1-4)
 
     crop = aligned[top:bottom, left:right]
     valid = coverage[top:bottom, left:right]
@@ -274,7 +306,7 @@ def prepare_field_crop(
 
     if coverage_fraction < 0.90:
         # Preserve strict coverage checks for the other fields.
-        if field != "date_sampled" or coverage_fraction < 0.50:
+        if field not in {'date_sampled','serial_number'} or coverage_fraction < 0.50:
             warnings.append(
                 f"{field}: field is partly outside the photo."
             )
@@ -307,11 +339,11 @@ def prepare_field_crop(
         # Perspective alignment can leave blank corners.
         crop[crop_mask == 0] = 255
 
-        warnings.append(
-            "Date crop reaches the photo edge. "
-            "Verify the complete date against the original."
-        )
+        warnings.append(f'{field}: crop reaches the photo edge. Verify the complete value against the original.')
 
+    if refine:
+        from scanner.vision.crop_adjustments import refine_field_crop
+        crop=refine_field_crop(crop,field)
     return crop
 
 
@@ -319,7 +351,8 @@ def read_circled_component(engine, aligned):
     import cv2
     import numpy as np
 
-    height, width = aligned.shape[:2]
+    height = TEMPLATES['small']['size'][1]
+    width = aligned.shape[1]
 
     start = int(height * 0.80)
     row = aligned[start:, :]
@@ -350,6 +383,18 @@ def read_circled_component(engine, aligned):
     numbers = set()
     kinds = set()
     checked = set()
+    # The original HSV mask only sees blue/purple pen. Also inspect closed
+    # black/grey rings, rejecting small printed glyph loops and open smears.
+    from scanner.vision.component_marks import black_circle_crops
+    for key,crop in black_circle_crops(row,height):
+        if key in checked:
+            continue
+        checked.add(key)
+        text=re.sub(r'[^A-Z0-9]','',''.join(read_text(engine,crop,line=True)).upper())
+        if text in {'1','2','3','4','5','6'}:
+            numbers.add(text)
+        elif text in {'GS','NGS'}:
+            kinds.add(text)
 
     for contour in contours:
         if len(contour) < 5:
@@ -436,31 +481,17 @@ def decode_barcodes(pixels):
 
 
 def process(job):
+    from scanner.reading.field_recognizer import FieldReader
+    field_reader = FieldReader()
     import cv2
     import numpy as np
 
     from PIL import Image, ImageOps
-    from rapidocr import RapidOCR, ModelType, OCRVersion
+    from rapidocr import RapidOCR
 
     cv2.setNumThreads(1)
 
-    engine = RapidOCR(params={
-        "Det.ocr_version": OCRVersion.PPOCRV5,
-        "Det.model_type": ModelType.MOBILE,
-
-        "Rec.ocr_version": OCRVersion.PPOCRV5,
-        "Rec.model_type": ModelType.MOBILE,
-
-        "Det.limit_side_len": 640,
-        "Det.limit_type": "max",
-
-        "Rec.rec_batch_num": 1,
-        "Cls.cls_batch_num": 1,
-
-        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
-        "EngineConfig.onnxruntime.inter_op_num_threads": 1,
-        "EngineConfig.onnxruntime.enable_cpu_mem_arena": False,
-    })
+    engine = RapidOCR(params=rapidocr_parameters())
 
     output_dir = Path(job["debug_dir"])
     output_dir.mkdir(
@@ -585,6 +616,7 @@ def process(job):
                     pixels,
                     decoded[0],
                     template,
+                    metadata=entry,
                 )
 
                 aligned_name = (
@@ -600,7 +632,21 @@ def process(job):
                     aligned_name
                 )
 
+                if entry.get('alignment_method') == 'tight_large_label':
+                    from scanner.vision.label_alignment import TIGHT_LARGE_FIELDS
+                    template = {**template, 'fields':TIGHT_LARGE_FIELDS}
+                if label_type == 'large':
+                    from scanner.vision.label_rows import large_row_regions
+                    detected_rows = large_row_regions(aligned,template)
+                    if detected_rows:
+                        template = {**template, 'fields':detected_rows['regions']}
+                        entry['row_baselines'] = detected_rows['baselines']
+                        entry['numeric_bottoms'] = detected_rows['numeric_bottoms']
+
                 for field, region in template["fields"].items():
+                    numeric_bottom=entry.get('numeric_bottoms',{}).get(field)
+                    if field=='date_sampled' and numeric_bottom is not None:
+                        region=(*region[:3],min(region[3],numeric_bottom/template['size'][1]))
                     crop = prepare_field_crop(
                         aligned,
                         coverage,
@@ -608,11 +654,22 @@ def process(job):
                         field,
                         region,
                         entry["warnings"],
+                        barcode_box=entry.get('barcode_box'),
+                        refine=False,
                     )
 
                     if crop is None:
                         values[field] = ""
                         continue
+
+                    # Retain the broad aligned box for comparison with stage two.
+                    box_name=f'photo_{index}_{field}_box.jpg'
+                    save_rgb(output_dir/box_name,crop)
+                    entry['debug'].append(box_name)
+                    from scanner.vision.crop_adjustments import refine_field_crop
+                    box_shape=list(crop.shape[:2])
+                    crop=refine_field_crop(crop,field)
+                    entry.setdefault('crop_stages',{})[field]={'box_shape':box_shape}
 
                     filename = (
                         f"photo_{index}_{field}.jpg"
@@ -627,15 +684,85 @@ def process(job):
                         filename
                     )
 
-                    recognized = clean(
-                        " ".join(
-                            read_text(
-                                engine,
-                                crop,
-                                line=True,
-                            )
-                        )
-                    )
+                    scores = []
+                    recognized = clean(field_reader.read(
+                        crop[..., ::-1].copy(), field, label_type,  # RGB crop -> BGR model input
+                        fallback=lambda: " ".join(read_text(engine, crop, line=True, confidence=scores)),
+                    ))
+                    score = field_reader.last_confidence
+                    if score is None and scores:
+                        score = min(scores)
+                    base=strip_heading(recognized,field,label_type)
+                    if field=='machine' and label_type=='large' and base.isdigit() and numeric_bottom is not None:
+                        numeric_region=(*region[:3],min(region[3],numeric_bottom/template['size'][1]))
+                        numeric_crop=prepare_field_crop(aligned,coverage,template,field,numeric_region,
+                            entry['warnings'],barcode_box=entry.get('barcode_box'))
+                        if numeric_crop is not None:
+                            from scanner.vision.crop_adjustments import focus_date_ink
+                            numeric_crop=focus_date_ink(numeric_crop,minimum_width_fraction=.08)
+                            if score is None or score<.95:
+                                numeric_scores=[]
+                                candidate=clean(' '.join(read_text(engine,numeric_crop,line=True,confidence=numeric_scores)))
+                                candidate=strip_heading(candidate,field,label_type)
+                                candidate_score=min(numeric_scores) if numeric_scores else None
+                                entry.setdefault('numeric_attempts',{})[field]=[{'text':base,'score':score},
+                                    {'text':candidate,'score':candidate_score}]
+                                if (candidate.isdigit() and len(candidate)>=len(base) and candidate_score is not None
+                                    and (score is None or candidate_score>=score+.05)):
+                                    if candidate!=base:
+                                        entry['warnings'].append(f'{field}: numeric crop reading changed; verify the complete number.')
+                                    recognized,score=candidate,candidate_score
+                            crop=numeric_crop
+                            save_rgb(output_dir/filename,crop)
+                    if os.environ.get('SCANNER_INK_RETRY')=='1' and field in {'machine','date_sampled'} and (score is None or score<.95):
+                        from scanner.vision.crop_adjustments import thin_heavy_ink, prefer_thinned_reading
+                        variant=thin_heavy_ink(crop)
+                        if variant is not None:
+                            retry_scores=[]
+                            candidate=clean(field_reader.read(variant[...,::-1].copy(),field,label_type,
+                                fallback=lambda:' '.join(read_text(engine,variant,line=True,confidence=retry_scores))))
+                            candidate_score=field_reader.last_confidence
+                            if candidate_score is None and retry_scores:
+                                candidate_score=min(retry_scores)
+                            candidate=strip_heading(candidate,field,label_type)
+                            base=strip_heading(recognized,field,label_type)
+                            entry.setdefault('ink_attempts',{})[field]=[{'text':base,'score':score},
+                                {'text':candidate,'score':candidate_score}]
+                            if candidate!=base:
+                                entry['warnings'].append(f'{field}: original and thin-ink OCR differ; verify the crop.')
+                            if prefer_thinned_reading(base,score,candidate,candidate_score,field,job.get('date_received','')):
+                                recognized,score=candidate,candidate_score
+                    from scanner.vision.crop_adjustments import tighten_field_right
+                    focused=tighten_field_right(crop)
+                    if focused.shape!=crop.shape:
+                        if score is None or score<.95:
+                            focused_scores=[]
+                            candidate=clean(field_reader.read(focused[...,::-1].copy(),field,label_type,
+                                fallback=lambda:' '.join(read_text(engine,focused,line=True,confidence=focused_scores))))
+                            candidate=strip_heading(candidate,field,label_type)
+                            candidate_score=field_reader.last_confidence
+                            if candidate_score is None and focused_scores:
+                                candidate_score=min(focused_scores)
+                            base=strip_heading(recognized,field,label_type)
+                            entry.setdefault('focus_attempts',{})[field]=[{'text':base,'score':score},
+                                {'text':candidate,'score':candidate_score}]
+                            if base and candidate.casefold()!=base.casefold():
+                                entry['warnings'].append(f'{field}: broad and tight crops disagree; original reading kept. Verify the full value.')
+                            else:
+                                from scanner.vision.crop_adjustments import can_fill_empty_from_focus
+                                if can_fill_empty_from_focus(base,candidate,candidate_score,field,
+                                    job.get('date_received',''),crop_quality(focused)):
+                                    recognized,score=candidate,candidate_score
+                        crop=focused
+                        save_rgb(output_dir/filename,crop)
+                    entry['crop_stages'][field]['focused_shape']=list(crop.shape[:2])
+                    entry.setdefault('field_scores', {})[field] = score
+                    entry.setdefault('field_quality', {})[field] = crop_quality(crop)
+                    recognized = strip_heading(recognized,field,label_type)
+                    if (not recognized and entry.get('alignment_method')=='tight_large_label'
+                        and not any(w.startswith(field+':') for w in entry['warnings'])
+                        and visually_empty(crop)):
+                        entry.setdefault('blank_fields',[]).append(field)
 
                     if field == "date_sampled":
                         values[field] = valid_written_date(
@@ -720,6 +847,7 @@ def process(job):
                 "show different tubes. Start a separate upload per tube."
         }
 
+    warnings.extend(field_reader.warnings)
     if len(detected_types) > 1:
         return {
             "error":
@@ -799,6 +927,10 @@ def process(job):
             )
 
     return {
+        "ocr_threads": ocr_threads(),
+        "decoded_sample_id":next(iter(barcode_ids)) if len(barcode_ids)==1 else None,
+        "blank_fields": [field for field in FIELDS if not suggestions[field] and results
+            and all(not entry.get('error') and field in entry.get('blank_fields',[]) for entry in results)],
         "label_type": label_type,
         "suggestions": suggestions,
         "alternatives": alternatives,

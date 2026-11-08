@@ -15,7 +15,7 @@ from rapidocr import RapidOCR, ModelType, OCRVersion
 
 if len(sys.argv) != 2:
     raise SystemExit(
-        "Usage: python test_handwriting.py uploads/SAMPLE_ID/image_1.jpg"
+        "Usage: python tools/test_handwriting.py uploads/SAMPLE_ID/image_1.jpg"
     )
 
 path = Path(sys.argv[1])

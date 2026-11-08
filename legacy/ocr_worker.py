@@ -10,7 +10,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 
 # Recognition must not contact outside services or download models.
-# Run the earlier test_handwriting.py once to download models first.
+# Run the earlier tools/test_handwriting.py once to download models first.
 def block_network(*args, **kwargs):
     raise OSError("Network disabled in offline OCR worker.")
 
@@ -272,7 +272,7 @@ if __name__ == "__main__":
         output = {
             "error":
                 "Offline OCR could not initialize. Run the earlier "
-                "test_handwriting.py in this same environment to make "
+                "tools/test_handwriting.py in this same environment to make "
                 "sure its models are downloaded. Details: "
                 + str(error)[:250]
         }
