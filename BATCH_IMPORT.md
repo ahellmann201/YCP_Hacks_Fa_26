@@ -17,7 +17,7 @@ The server checks the archive and prepares all tube records before adding them t
 
 Limits: 100 tubes, 1–8 photos per tube, 250 MiB compressed ZIP, 512 MiB total uncompressed photos, 10 MiB per source photo, and 20 megapixels per photo. Non-photo notes, hidden files and macOS metadata are ignored. Unsupported common photo formats, unsafe paths, links, encrypted files, invalid images, and duplicate photo paths are rejected. Archive paths are not extracted onto the filesystem.
 
-JPG, PNG and WebP use the app's existing Pillow support. HEIC/HEIF import requires the optional Pillow HEIF reader in the Pi environment:
+JPG, PNG and WebP use the app's existing Pillow support. The importer detects their actual contents and assigns the correct saved extension even if the original filename was mislabeled. Single-page TIFF, BMP and MPO contents found in a supported-named photo are converted to JPEG; multi-page TIFF and unsupported contents are rejected. The detected format is recorded in the sample metadata. HEIC/HEIF import requires the optional Pillow HEIF reader in the Pi environment:
 
 ```bash
 .venv-ocr/bin/python -m pip install pillow-heif

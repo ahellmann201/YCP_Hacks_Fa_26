@@ -96,21 +96,27 @@ def prepare_archive(file, staging, session_id, received, created_at):
                     with Image.open(raw) as image:
                         if image.width*image.height > 20_000_000:
                             raise ImportError('Photo exceeds 20 megapixels: '+entry.filename)
-                        if suffix in {'.heic', '.heif'}:
+                        actual = image.format
+                        detected_extension = {'JPEG':'.jpg', 'PNG':'.png', 'WEBP':'.webp'}.get(actual)
+                        converted = detected_extension is None
+                        if actual == 'TIFF' and getattr(image, 'n_frames', 1) > 1:
+                            raise ImportError('Multi-page TIFF must be split into separate photos: '+entry.filename)
+                        if converted and actual not in {'HEIF', 'HEIC', 'TIFF', 'BMP', 'MPO'}:
+                            raise ImportError('Unsupported image contents ('+str(actual)+'): '+entry.filename)
+                        name = f'image_{number}{detected_extension or ".jpg"}'
+                        target = destination/name
+                        if converted:
                             ImageOps.exif_transpose(image).convert('RGB').save(target, 'JPEG', quality=92)
                         else:
-                            expected = {'.jpg':'JPEG', '.png':'PNG', '.webp':'WEBP'}[EXTENSIONS[suffix]]
-                            if image.format != expected:
-                                raise ImportError('Photo contents do not match its extension: '+entry.filename)
                             image.verify()
-                    if suffix not in {'.heic', '.heif'}:
+                    if not converted:
                         raw.rename(target)
                     else:
                         raw.unlink()
                 except (OSError, Image.DecompressionBombError) as error:
                     raise ImportError('Cannot read photo: '+entry.filename) from error
                 images.append({'filename':name, 'size_bytes':target.stat().st_size,
-                               'original_name':entry.filename})
+                               'original_name':entry.filename, 'detected_format':actual})
             sample = {'record_id':record_id, 'session_id':session_id, 'created_at':created_at,
                       'date_received':received, 'source_folder':source_folder,
                       'images':images, 'image_count':len(images)}

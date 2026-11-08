@@ -28,6 +28,19 @@ def archive(entries):
 
 
 class BatchTests(unittest.TestCase):
+    def test_mislabeled_supported_formats_use_actual_contents(self):
+        for actual, expected in [('PNG','.png'), ('JPEG','.jpg'), ('TIFF','.jpg'), ('BMP','.jpg')]:
+            with self.subTest(actual=actual), tempfile.TemporaryDirectory() as temporary:
+                output=io.BytesIO()
+                Image.new('RGB',(60,30),'white').save(output,actual)
+                root=Path(temporary)
+                samples=prepare_archive(archive([('tube/Large_Label (1).jpeg',output.getvalue())]),root,'s','date','now')
+                image=samples[0]['images'][0]
+                self.assertEqual(image['filename'],'image_1'+expected)
+                self.assertEqual(image['detected_format'],actual)
+                with Image.open(root/samples[0]['record_id']/image['filename']) as saved:
+                    self.assertEqual(saved.format,'PNG' if actual=='PNG' else 'JPEG')
+
     def test_folder_grouping_staging_and_atomic_queue(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
