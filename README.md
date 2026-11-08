@@ -2,6 +2,17 @@
 
 A Raspberry Pi–hosted app for photographing sample tubes, reading labels offline, reviewing the results, and exporting a CSV.
 
+## Contributors
+
+This test tube scanner is an entry for the **SpaceXAI challenge**.
+
+**Grok 4.7** (SpaceXAI), working in Cursor, is writing the scanner code. That includes the scanner page, webcam auto capture, iPhone photo intake, the label review and CSV flow, the project documentation, and the tube cradle designs in `hardware/`. The model implements those pieces directly in this repository from the team’s requests, then the changes are committed here.
+
+Human contributors on this repository:
+
+- Muhammad Abdulrehman
+- Andrew Hellmann
+
 ## Quick start
 
 Run these commands on the Pi:
