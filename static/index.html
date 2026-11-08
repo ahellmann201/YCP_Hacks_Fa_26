@@ -82,12 +82,17 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .confirm { display:block; padding:14px; margin:14px 0 5px; background:var(--metric); }
 .confirm input { width:22px; height:22px; vertical-align:middle; margin-right:8px; }
 .card.confirmed { border:2px solid var(--ok); }
-.assistant { border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:8px; background:var(--focus); }
-.assistant button { font-size:14px; padding:9px 11px; }
 .camera-preview { width:100%; max-height:360px; background:#111; }
 .camera-frame { position:relative; }
 .camera-guide { position:absolute; left:30%; top:18%; width:40%; height:64%; border:3px dashed #fff; pointer-events:none; }
 .camera-guide.ready { border-color:#22c55e; }
+.assistant { border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:8px; background:var(--focus); }
+.assistant button { font-size:14px; padding:9px 11px; }
+.demo-close { margin-top:16px; }
+.bar-row { display:grid; grid-template-columns:148px 1fr 64px; gap:8px; align-items:center; margin:6px 0; font-size:14px; }
+.bar { height:14px; background:var(--line); border-radius:7px; overflow:hidden; }
+.bar span { display:block; height:100%; background:#2563eb; }
+.bar.baseline span { background:#94a3b8; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -120,6 +125,20 @@ summary { cursor:pointer; padding:12px 0; }
     <button id="clear-photos" class="theme-toggle" type="button" hidden>Clear photos</button>
     <p id="photo-count" class="muted" hidden></p>
     <div id="photo-previews" class="photo-grid"></div>
+    <section id="live-demo" aria-labelledby="capture-heading">
+        <h2 id="capture-heading">Live demo</h2>
+        <p class="muted">Start the camera, keep each label face steady, and the view is captured. The motor then turns to the next face. Eight views, or Stop camera, uploads that tube for review.</p>
+        <label>Camera<select id="camera-device" class="field"><option value="">Default camera</option></select></label>
+        <button id="start-camera" type="button">Start camera</button>
+        <button id="stop-camera" type="button">Stop camera</button>
+        <div id="camera-frame" class="camera-frame" hidden>
+            <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+            <div id="camera-guide" class="camera-guide" aria-hidden="true"></div>
+        </div>
+        <label><input id="auto-capture" type="checkbox" checked> Auto capture when centered and steady</label>
+        <button id="capture-view" type="button">Capture view</button>
+        <p id="camera-status" class="muted" role="status">Webcam needs HTTPS or localhost. Take photo still works on the phone.</p>
+    </section>
     <a id="download" class="button" hidden>Download current CSV</a>
     <button id="finish-export" type="button" hidden>Download CSV & finish session</button>
     <label style="display:block;margin:6px 0;font-size:15px;">
@@ -137,25 +156,22 @@ summary { cursor:pointer; padding:12px 0; }
             <p id="accuracy-detail" class="muted">Confirm reviewed samples to measure accuracy.</p>
         </div>
     </div>
+    <section class="demo-close" aria-label="Demo comparison">
+        <h2>Where this lands</h2>
+        <p class="muted">Time per tube. By hand is the 30-second target. The scanner bar is the recorded three-thread Pi run, 20.8 seconds, leaving out upload and review.</p>
+        <div class="bar-row"><span>By hand</span><div class="bar baseline"><span style="width:100%"></span></div><strong>30s</strong></div>
+        <div class="bar-row"><span>Scanner</span><div class="bar"><span style="width:69.3%"></span></div><strong>20.8s</strong></div>
+        <div class="bar-row" id="session-time-row" hidden><span>This session</span><div class="bar"><span id="session-time-bar"></span></div><strong id="session-time-value">—</strong></div>
+        <p class="muted">Exact fields on the small development set used to check the trained reader: 5 of 9 before that training, 6 of 9 after. This session fills in as confirmed reviews come back.</p>
+        <div class="bar-row"><span>Before training</span><div class="bar baseline"><span style="width:55.6%"></span></div><strong>5/9</strong></div>
+        <div class="bar-row"><span>Trained reader</span><div class="bar"><span style="width:66.7%"></span></div><strong>6/9</strong></div>
+        <div class="bar-row" id="session-accuracy-row" hidden><span>This session</span><div class="bar"><span id="session-accuracy-bar"></span></div><strong id="session-accuracy-value">—</strong></div>
+        <p class="muted">Next is 1,000 samples. That is the set that teaches more handwriting and is how the time per tube comes down further from the 30 seconds it takes by hand.</p>
+    </section>
     <p class="muted">Timing leaves out upload, waiting, and review; accuracy uses confirmed fields only, and a confident reading can still be wrong.</p>
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
 </div>
-<section class="card" aria-labelledby="capture-heading">
-    <h2 id="capture-heading">Webcam capture</h2>
-    <p class="muted">Keep the tube steady, avoid glare, and rotate it to show the whole label.</p>
-    <label>Camera<select id="camera-device" class="field"><option value="">Default camera</option></select></label>
-    <button id="start-camera" type="button">Start camera</button>
-    <button id="stop-camera" type="button">Stop camera</button>
-    <div id="camera-frame" class="camera-frame" hidden>
-        <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
-        <div id="camera-guide" class="camera-guide" aria-hidden="true"></div>
-    </div>
-    <label><input id="auto-capture" type="checkbox" checked> Auto capture when centered and steady</label>
-    <button id="capture-view" type="button">Capture view</button>
-    <p id="camera-status" class="muted" role="status">Webcam needs HTTPS or localhost.</p>
-    <p class="muted">Captured views join the phone photos above. Use Upload samples when ready.</p>
-</section>
 <section id="review-section" aria-labelledby="review-title">
     <h2 id="review-title">Samples to review</h2>
     <div id="cards"></div>
@@ -187,8 +203,8 @@ const names = [
 const cards = new Map();
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
-const photoQueue = [];
 let assistantAvailable = false, assistantImageAvailable = false;
+const photoQueue = [];
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -325,7 +341,19 @@ function renderBar() {
         $("#average-detail").textContent=Number.isFinite(average)
             ? `${metrics.timed_tubes} tubes · ${average<=30?"Within":"Over"} 30s average target`
             : "No timed tubes yet.";
+        const sessionTime=$("#session-time-row");
+        if(Number.isFinite(average)) {
+            sessionTime.hidden=false;
+            $("#session-time-value").textContent=`${average.toFixed(1)}s`;
+            $("#session-time-bar").style.width=`${Math.min(100, average/30*100)}%`;
+        }
         const accuracy=metrics.field_accuracy_percent;
+        const sessionAccuracy=$("#session-accuracy-row");
+        if(Number.isFinite(accuracy)) {
+            sessionAccuracy.hidden=false;
+            $("#session-accuracy-value").textContent=`${accuracy.toFixed(0)}%`;
+            $("#session-accuracy-bar").style.width=`${Math.max(0, Math.min(100, accuracy))}%`;
+        }
         $("#field-accuracy").textContent=Number.isFinite(accuracy)?`${accuracy.toFixed(1)}%`:"—";
         $("#accuracy-detail").textContent=Number.isFinite(accuracy)
             ? `${metrics.correct_fields} correct / ${metrics.total_fields} fields · ${metrics.scored_tubes} confirmed tubes`
@@ -354,10 +382,10 @@ function saveCard(c,confirmed) {
     const version=c.version;
     const payload={
         session_id:sessionId, label_type:c.type.value,
-        confirmed, fields:values(c)
+        confirmed, fields:values(c),
+        expected_revision:c.revision||0
     };
     if(c.suggestion) {
-        payload.expected_revision=c.suggestion.revision;
         payload.suggestion_request_id=c.suggestion.request_id;
         payload.suggestion_field=c.suggestion.field;
     }
@@ -371,10 +399,10 @@ function saveCard(c,confirmed) {
         c.saveError=false;
         c.retry.hidden=true;
         session=result.session;
-        c.revision=result.review.revision;
-        c.suggestion=null;
         if(version===c.version) {
             c.dirty=false;
+            c.suggestion=null;
+            if(Number.isInteger(result.review?.revision)) c.revision=result.review.revision;
             c.serverConfirmed=confirmed;
             c.check.checked=confirmed;
             c.el.hidden=confirmed;
@@ -399,7 +427,7 @@ function edited(c, fromSuggestion=false) {
     const wasConfirmed=c.check.checked || c.serverConfirmed;
     c.version++;
     if(!fromSuggestion) c.suggestion=null;
-    if(c.assistantResult) {
+    if(c.assistantResult && c.assistantOutput) {
         c.assistantResult=null;
         c.assistantOutput.textContent="Review changed. Ask again for a current suggestion.";
     }
@@ -853,6 +881,8 @@ async function uploadPhotoFiles(files) {
         clearPhotos();
         say("Queued. You can photograph the next tube.");
         await refresh();
+        const review=$("#review-section");
+        if(review) review.scrollIntoView({behavior:"smooth", block:"start"});
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
     } finally {
@@ -913,7 +943,7 @@ async function uploadArchive(file) {
         uploading=false; $("#photos").value=""; renderBar();
     }
 }
-let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false;
+let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false, motorBusy=false;
 function cameraControls() {
     $("#capture-view").disabled=!cameraStream || photoQueue.length>=8 || uploading || finishing;
     $("#stop-camera").disabled=!cameraStream;
@@ -946,7 +976,7 @@ async function startCamera() {
         devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>
             choice.append(new Option(device.label||`Camera ${index+1}`,device.deviceId)));
         choice.value=selected;
-        $("#camera-status").textContent="Camera ready. Center the label and rotate for another view.";
+        $("#camera-status").textContent="Camera ready. A steady label in the frame is captured, then the motor asks for the next view.";
         cameraControls();
     } catch(error) {
         stopCamera();
@@ -986,10 +1016,36 @@ async function captureView(automatic=false) {
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.93));
     if(blob) addPhonePhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{type:"image/jpeg"})]);
     cameraControls();
-    if(automatic) $("#camera-status").textContent="View captured. Rotate the tube for the next view.";
+    if(automatic) {
+        if(photoQueue.length>=8) {
+            $("#camera-status").textContent="Eight views captured. Uploading this tube.";
+            uploadPhotoFiles(photoQueue.map(photo=>photo.file));
+        } else {
+            $("#camera-status").textContent="View captured. Turning to the next label.";
+            advanceTube();
+        }
+    }
+}
+async function advanceTube() {
+    motorBusy=true;
+    cameraControls();
+    try {
+        const result=await api("/live/motor", post({command:"n"}));
+        $("#camera-status").textContent=result.connected
+            ? "Next view ready. Hold the label steady for the next photo."
+            : "Photo saved. Turn the tube by hand for the next view. Set SCANNER_MOTOR_PORT to move the Arduino.";
+    } catch(error) {
+        $("#camera-status").textContent="Photo saved. Motor did not move: "+error.message;
+    } finally {
+        motorBusy=false;
+        autoCaptured=null;
+        autoPrevious=null;
+        autoStableSince=0;
+        cameraControls();
+    }
 }
 function checkAutoCapture() {
-    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || photoQueue.length>=8 || document.hidden) return;
+    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || motorBusy || photoQueue.length>=8 || document.hidden) return;
     const sample=cameraSample(); if(!sample) return;
     const detailed=labelDetail(sample), moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
     autoPrevious=sample;
@@ -1002,7 +1058,13 @@ function checkAutoCapture() {
     captureView(true).finally(()=>{ autoCaptured=sample; autoStableSince=0; autoBusy=false; });
 }
 $("#start-camera").onclick=startCamera;
-$("#stop-camera").onclick=stopCamera;
+$("#stop-camera").onclick=()=>{
+    stopCamera();
+    if(photoQueue.length && !uploading && !finishing) {
+        $("#camera-status").textContent="Uploading the views from this tube.";
+        uploadPhotoFiles(photoQueue.map(photo=>photo.file));
+    }
+};
 $("#camera-device").onchange=()=>{ if(cameraStream) startCamera(); };
 $("#capture-view").onclick=()=>{ autoCaptured=cameraSample(); captureView(); };
 $("#auto-capture").onchange=()=>{ autoPrevious=null; autoCaptured=null; autoStableSince=0; };
@@ -1017,7 +1079,8 @@ window.addEventListener("beforeunload",event=>{
 async function initialize() {
     renderBar();
     try {
-        const app=await api("/app"); bootId=app.boot_id; assistantAvailable=!!app.assistant_available;
+        const app=await api("/app"); bootId=app.boot_id;
+        assistantAvailable=!!app.assistant_available;
         assistantImageAvailable=!!app.assistant_image_available;
         let saved=null;
         try { saved=JSON.parse(sessionStorage.getItem(STORAGE)||"null"); } catch(_) {}

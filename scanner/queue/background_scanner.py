@@ -248,8 +248,8 @@ class QueueStore(SessionStore):
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
-                        "image_count", "evidence", "source_folder", "field_checks", "blank_fields", "ocr_candidates", "original_fields",
-                        "revision", "suggestion_sources"
+                            "image_count", "evidence", "source_folder", "field_checks", "blank_fields", "ocr_candidates", "original_fields",
+                            "revision", "suggestion_sources"
                         )
                     } if review else None,
                 })
