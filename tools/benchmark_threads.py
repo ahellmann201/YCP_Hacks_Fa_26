@@ -99,7 +99,8 @@ def worker(args):
                 raise ValueError('Invalid or missing tube photo')
             images.append(str(path))
         debug = root/'analysis'/'benchmark'
-        request.write_text(json.dumps({'images':images, 'debug_dir':str(debug)}))
+        request.write_text(json.dumps({'images':images, 'debug_dir':str(debug),
+                                       'date_received':sample.get('date_received','')}))
         before = time.perf_counter()
         env = dict(os.environ, SCANNER_OCR_THREADS=str(args.threads))
         process = subprocess.run([sys.executable, str(BASE/'scanner_auto.py'), str(request), str(output)],

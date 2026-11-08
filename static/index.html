@@ -142,7 +142,7 @@ function remember() {
 }
 function dateText(value) {
     const raw=String(value || "").trim();
-    const full=raw.match(/^(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{2}|\d{4})$/);
+    const full=raw.match(/^(\d{1,2})\s*[/+.-]\s*(\d{1,2})\s*[/+.-]\s*(\d{2}|\d{4})$/);
     if(full) {
         const year=full[3].length===2?2000+Number(full[3]):Number(full[3]);
         const formatted=`${full[1].padStart(2,"0")}/${full[2].padStart(2,"0")}/${String(year).padStart(4,"0")}`;
@@ -162,6 +162,15 @@ function validDate(value) {
 function validReceived(value) {
     const m=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return !!m && validDate(`${m[2]}/${m[3]}/${m[1]}`);
+}
+function sampledDateIssue(sampled,received) {
+    const raw=String(sampled||"").trim();
+    if(!/^\d{1,2}\s*[/+.-]\s*\d{1,2}\s*[/+.-]\s*(\d{2}|\d{4})$/.test(raw)) return "";
+    const normalized=dateText(raw);
+    if(!validDate(normalized)) return "Date Sampled is not a valid calendar date. Check the crop.";
+    const parts=normalized.split("/");
+    return validReceived(received) && `${parts[2]}-${parts[0]}-${parts[1]}`>received
+        ? "Date Sampled is after Date Received. Check the year/digits or correct Date Received." : "";
 }
 function required(c) {
     const keys=["sample_id","date_sampled","date_received","machine","component"];
@@ -188,6 +197,8 @@ function fieldStates(c) {
             if(!fields[key] && needed.includes(key)) error="Check the label.";
             if(key==="date_sampled" && !fields[key] && !(c.blankFields||[]).includes(key))
                 error="Check the date as written on the label.";
+            if(key==="date_sampled" && fields[key])
+                error=sampledDateIssue(fields[key],fields.date_received);
             if(key==="date_received" && !validReceived(fields[key]))
                 error="Enter a valid received date.";
             if(key==="component" && c.type.value==="small" &&
@@ -493,6 +504,8 @@ function addCard(job) {
             if(c.type.value==="unknown") error="Choose Small or Large.";
             else if(!validReceived(fields.date_received))
                 error="Enter a valid Date Received.";
+            else if(sampledDateIssue(fields.date_sampled,fields.date_received))
+                error=sampledDateIssue(fields.date_sampled,fields.date_received);
             else if(c.type.value==="small" && fields.component &&
                     !/^[1-6] (GS|NGS)$/.test(fields.component))
                 error="Small-label Component must look like 4 GS.";

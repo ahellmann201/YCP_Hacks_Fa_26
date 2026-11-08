@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from background_scanner import QueueStore, ScannerQueue
 from session_store import SessionError
 from zip_import import prepare_archive, ImportError as BatchImportError
-from sample_dates import normalize_sample_date
+from sample_dates import normalize_sample_date, sampled_date_issue
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
@@ -251,6 +251,9 @@ def edit_review(record_id: str, request: Review):
             raise HTTPException(400, "Choose Small or Large before confirming.")
         if not valid_received(fields["date_received"]):
             raise HTTPException(400, "Enter a valid Date Received.")
+        issue=sampled_date_issue(fields['date_sampled'],fields['date_received'])
+        if issue:
+            raise HTTPException(400,issue)
         if request.label_type == "small" and fields["component"]:
             if not re.fullmatch(r"[1-6] (?:GS|NGS)", fields["component"]):
                 raise HTTPException(400, "Component must look like 4 GS.")

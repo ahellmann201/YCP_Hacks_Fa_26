@@ -322,6 +322,7 @@ class ScannerQueue:
             request = Path(temporary) / "job.json"
             output = Path(temporary) / "output.json"
             request.write_text(json.dumps({
+                "date_received": sample['date_received'],
                 "images": [str((folder / name).resolve()) for name in names],
                 "debug_dir": str((folder / "analysis" / run_id).resolve()),
             }), encoding="utf-8")

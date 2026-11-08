@@ -143,6 +143,8 @@ git fetch origin
 
 For a **clean checkout already on `training`**, stop the server, run `git pull --ff-only`, then `bash scripts/start_demo.sh`. If there are local edits or individually restored files, save/commit those before switching branches or pulling. Do not hard-reset or delete `uploads/`/`scanner.sqlite3` as an update step. Pushing source code does not back up sample data.
 
+If VS Code still shows the old root files and many `M`/`A`/`U` markers, use the [clean Pi checkout guide](docs/PI_CLEAN_CHECKOUT.md). It creates `~/sample-scanner-demo` on `training` and links the existing environment and data, preserving the old working tree. Use that folder instead in the demo commands.
+
 ## Demo troubleshooting
 
 | Symptom | Action |

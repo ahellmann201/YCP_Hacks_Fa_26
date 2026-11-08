@@ -8,6 +8,7 @@ from pathlib import Path
 from ocr_settings import ocr_threads, rapidocr_parameters
 from field_text import strip_heading, visually_empty
 from reading_quality import crop_quality
+from sample_dates import extract_written_date
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -97,16 +98,7 @@ def identify_type(text):
 
 
 def valid_written_date(text):
-    # Accept partial or full numeric dates without interpreting them.
-    # Examples: 10/26, 9/28/26, 09/28/2026.
-    match = re.search(
-        r"(?<!\d)\d{1,4}\s*[/.-]\s*\d{1,4}"
-        r"(?:\s*[/.-]\s*\d{1,4})?(?!\d)",
-        str(text),
-    )
-    if not match:
-        return ""
-    return re.sub(r"\s+", "", match.group())
+    return extract_written_date(text)
 
 
 def read_text(engine, image, line=False, confidence=None):
@@ -275,6 +267,12 @@ def prepare_field_crop(
     # Use the original template width, not the expanded canvas width.
     width = template["size"][0]
 
+    if field=='serial_number':
+        from crop_adjustments import extend_serial_region
+        region,extended=extend_serial_region(aligned,template,region)
+        if extended:
+            warnings.append('serial_number: crop widened because ink reached its right edge; verify the final characters.')
+
     x1, y1, x2, y2 = region
 
     left = max(0, round(x1 * width))
@@ -295,7 +293,7 @@ def prepare_field_crop(
 
     if coverage_fraction < 0.90:
         # Preserve strict coverage checks for the other fields.
-        if field != "date_sampled" or coverage_fraction < 0.50:
+        if field not in {'date_sampled','serial_number'} or coverage_fraction < 0.50:
             warnings.append(
                 f"{field}: field is partly outside the photo."
             )
@@ -328,10 +326,7 @@ def prepare_field_crop(
         # Perspective alignment can leave blank corners.
         crop[crop_mask == 0] = 255
 
-        warnings.append(
-            "Date crop reaches the photo edge. "
-            "Verify the complete date against the original."
-        )
+        warnings.append(f'{field}: crop reaches the photo edge. Verify the complete value against the original.')
 
     return crop
 
@@ -653,6 +648,24 @@ def process(job):
                     score = field_reader.last_confidence
                     if score is None and scores:
                         score = min(scores)
+                    if os.environ.get('SCANNER_INK_RETRY')=='1' and field in {'machine','date_sampled'} and (score is None or score<.95):
+                        from crop_adjustments import thin_heavy_ink, prefer_thinned_reading
+                        variant=thin_heavy_ink(crop)
+                        if variant is not None:
+                            retry_scores=[]
+                            candidate=clean(field_reader.read(variant[...,::-1].copy(),field,label_type,
+                                fallback=lambda:' '.join(read_text(engine,variant,line=True,confidence=retry_scores))))
+                            candidate_score=field_reader.last_confidence
+                            if candidate_score is None and retry_scores:
+                                candidate_score=min(retry_scores)
+                            candidate=strip_heading(candidate,field,label_type)
+                            base=strip_heading(recognized,field,label_type)
+                            entry.setdefault('ink_attempts',{})[field]=[{'text':base,'score':score},
+                                {'text':candidate,'score':candidate_score}]
+                            if candidate!=base:
+                                entry['warnings'].append(f'{field}: original and thin-ink OCR differ; verify the crop.')
+                            if prefer_thinned_reading(base,score,candidate,candidate_score,field,job.get('date_received','')):
+                                recognized,score=candidate,candidate_score
                     entry.setdefault('field_scores', {})[field] = score
                     entry.setdefault('field_quality', {})[field] = crop_quality(crop)
                     recognized = strip_heading(recognized,field,label_type)

@@ -1,8 +1,6 @@
 """Autofill OCR readings with review hints; never guess corrections or call smears blank."""
-from datetime import date
 import math
-import re
-from sample_dates import same_sample_date
+from sample_dates import same_sample_date, sampled_date_issue
 
 
 def crop_quality(crop):
@@ -49,15 +47,9 @@ def guard_readings(fields, kind, result, received):
                 if reason not in reasons:
                     reasons.append(reason)
         if field=='date_sampled':
-            match=re.fullmatch(r'(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})',str(value))
-            if match:
-                month,day,year=map(int,match.groups())
-                year=year+2000 if year<100 else year
-                try:
-                    if date(year,month,day)>date.fromisoformat(received):
-                        reasons.append('Read date is after Date Received; verify its digits, especially the year.')
-                except ValueError:
-                    reasons.append('Read date is not a valid calendar date.')
+            issue=sampled_date_issue(value,received)
+            if issue:
+                reasons.append(issue)
         if reasons:
             candidates[field]=[str(value)]
             withheld[field]=reasons
