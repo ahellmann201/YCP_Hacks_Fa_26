@@ -32,6 +32,15 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
     display:block; width:100%; max-height:65vh; margin:12px 0;
     background:#101820; border:1px solid #d4dce5;
 }
+.camera-frame { position:relative; margin:12px 0; }
+.camera-frame .camera-preview { margin:0; }
+.camera-guide {
+    position:absolute; left:35%; top:12%; width:30%; height:76%;
+    border:3px dashed #f8fafc; border-radius:18px; pointer-events:none;
+    box-shadow:0 0 0 1px #172334;
+}
+.camera-guide.ready { border-color:#22c55e; }
+.auto-control { display:block; margin:10px 0; }
 .photo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
 .photo-item { min-width:0; margin:0; padding:8px; border:1px solid #d4dce5; border-radius:8px; }
 .photo-item img { display:block; width:100%; height:auto; }
@@ -80,13 +89,20 @@ summary { cursor:pointer; padding:12px 0; }
     </select>
     <button id="start-camera" type="button" disabled>Start camera</button>
     <button id="stop-camera" type="button" disabled>Stop camera</button>
-    <video id="camera-preview" class="camera-preview" autoplay playsinline muted hidden></video>
+    <div id="camera-frame" class="camera-frame" hidden>
+        <video id="camera-preview" class="camera-preview" autoplay playsinline muted></video>
+        <div id="camera-guide" class="camera-guide" aria-hidden="true"></div>
+    </div>
+    <label class="auto-control"><input id="auto-capture" type="checkbox" checked> Auto capture when the label is centered, clear, and steady</label>
     <button id="capture-view" type="button" disabled>Capture view</button>
     <p id="camera-status" class="muted status" role="status" aria-live="polite">
         Webcam preview requires HTTPS or localhost. Allow camera access when prompted.
     </p>
     <h3>Photos for this tube (<span id="photo-count">0</span>/8)</h3>
     <div id="photo-previews" class="photo-grid"></div>
+    <input id="iphone-camera" type="file"
+        accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+    <button id="take-iphone-photo" type="button" disabled>Take photo with iPhone</button>
     <input id="photos" type="file"
         accept="image/jpeg,image/png,image/webp" multiple hidden>
     <button id="choose-photos" type="button" disabled>Add existing photos</button>
@@ -114,6 +130,8 @@ const photoQueue = [];
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false;
 let cameraStream = null, cameraStarting = false;
+let autoTimer = null, autoPrevious = null, autoCaptured = null;
+let autoStableSince = 0, autoBusy = false;
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -201,6 +219,7 @@ function renderBar() {
     $("#choose-photos").disabled=uploading || !initialized;
     $("#clear-photos").disabled=uploading || !photoQueue.length;
     $("#capture-view").disabled=uploading || !cameraStream || photoQueue.length>=8;
+    $("#take-iphone-photo").disabled=uploading || !initialized || photoQueue.length>=8;
     $("#start-camera").disabled=uploading || !initialized || cameraStarting;
     $("#stop-camera").disabled=uploading || !cameraStream;
     $("#camera-device").disabled=uploading || !initialized;
@@ -526,10 +545,14 @@ async function loadCameraDevices(activeDeviceId) {
     select.value=activeDeviceId||"";
 }
 function stopCamera(updateStatus=true) {
+    clearInterval(autoTimer);
+    autoTimer=null; autoPrevious=null; autoCaptured=null;
+    autoStableSince=0;
+    $("#camera-guide").classList.remove("ready");
     if(cameraStream) cameraStream.getTracks().forEach(track=>track.stop());
     cameraStream=null;
     $("#camera-preview").srcObject=null;
-    $("#camera-preview").hidden=true;
+    $("#camera-frame").hidden=true;
     renderBar();
     if(updateStatus) $("#camera-status").textContent="Camera stopped.";
 }
@@ -552,7 +575,7 @@ async function startCamera(deviceId="") {
         });
         const preview=$("#camera-preview");
         preview.srcObject=cameraStream;
-        preview.hidden=false;
+        $("#camera-frame").hidden=false;
         await preview.play();
         let deviceLoadMessage="";
         try {
@@ -563,7 +586,8 @@ async function startCamera(deviceId="") {
                 `Preview started, but camera selection could not be loaded: ${error.message}`;
         }
         $("#camera-status").textContent=deviceLoadMessage ||
-            "Camera ready. Hold the tube still and capture each focused view.";
+            "Center the label inside the guide and hold the tube steady.";
+        autoTimer=setInterval(checkAutoCapture,250);
     } catch(error) {
         stopCamera(false);
         $("#camera-status").textContent=
@@ -584,11 +608,88 @@ $("#stop-camera").onclick=()=>stopCamera();
 $("#camera-device").onchange=()=>{
     if(cameraStream) startCamera($("#camera-device").value);
 };
-$("#capture-view").onclick=()=>{
+$("#auto-capture").onchange=()=>{
+    autoPrevious=null; autoCaptured=null; autoStableSince=0;
+    $("#camera-guide").classList.remove("ready");
+    if(cameraStream) $("#camera-status").textContent=$("#auto-capture").checked
+        ? "Auto capture on. Center the label and hold it steady."
+        : "Auto capture off. Use Capture view when ready.";
+};
+function cameraSample() {
     const preview=$("#camera-preview");
-    if(!cameraStream || !preview.videoWidth || !preview.videoHeight) {
-        $("#camera-status").textContent="Wait for the camera preview to become ready.";
+    if(!cameraStream || !preview.videoWidth || !preview.videoHeight) return null;
+    const canvas=document.createElement("canvas");
+    canvas.width=160; canvas.height=90;
+    const context=canvas.getContext("2d",{willReadFrequently:true});
+    if(!context) return null;
+    context.drawImage(preview,0,0,160,90);
+    const pixels=context.getImageData(0,0,160,90).data;
+    const gray=new Uint8Array(160*90);
+    for(let i=0;i<gray.length;i++)
+        gray[i]=(pixels[4*i]*77+pixels[4*i+1]*150+pixels[4*i+2]*29)>>8;
+    return gray;
+}
+function centerDifference(a,b) {
+    let total=0, count=0;
+    for(let y=14;y<76;y+=2) for(let x=56;x<104;x+=2) {
+        total+=Math.abs(a[y*160+x]-b[y*160+x]); count++;
+    }
+    return total/count;
+}
+function labelDetail(gray) {
+    let center=0, sides=0, centerCount=0, sideCount=0;
+    for(let y=15;y<75;y+=2) for(let x=20;x<140;x+=2) {
+        const p=y*160+x;
+        const edge=Math.abs(gray[p]-gray[p+1])+
+            Math.abs(gray[p]-gray[p+160]);
+        if(x>=56 && x<104) { center+=edge; centerCount++; }
+        else if((x>=20 && x<48) || (x>=112 && x<140)) {
+            sides+=edge; sideCount++;
+        }
+    }
+    const centerMean=center/centerCount;
+    return centerMean>12 && centerMean>sides/sideCount*1.35;
+}
+function checkAutoCapture() {
+    if(!$("#auto-capture").checked || !cameraStream || uploading ||
+       autoBusy || photoQueue.length>=8 || document.hidden) return;
+    const sample=cameraSample();
+    if(!sample) return;
+    const detailed=labelDetail(sample);
+    const moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
+    autoPrevious=sample;
+    if(!detailed || moving) {
+        autoStableSince=0;
+        $("#camera-guide").classList.remove("ready");
+        $("#camera-status").textContent=detailed
+            ? "Hold the tube steady inside the guide…"
+            : "Center the printed label inside the guide and bring it into focus.";
         return;
+    }
+    if(autoCaptured) {
+        if(centerDifference(sample,autoCaptured)<5.5) {
+            $("#camera-status").textContent="View captured. Rotate the tube for another view.";
+            return;
+        }
+        autoCaptured=null;
+    }
+    if(!autoStableSince) autoStableSince=Date.now();
+    $("#camera-guide").classList.add("ready");
+    $("#camera-status").textContent="Label looks clear. Keep it steady…";
+    if(Date.now()-autoStableSince<1200) return;
+    autoBusy=true;
+    captureView(true).finally(()=>{
+        autoCaptured=sample;
+        autoStableSince=0;
+        autoBusy=false;
+    });
+}
+function captureView(automatic=false) {
+    const preview=$("#camera-preview");
+    if(uploading || photoQueue.length>=8 || !cameraStream ||
+       !preview.videoWidth || !preview.videoHeight) {
+        $("#camera-status").textContent="Wait for the camera preview to become ready.";
+        return Promise.resolve(false);
     }
     const canvas=document.createElement("canvas");
     canvas.width=preview.videoWidth;
@@ -596,23 +697,36 @@ $("#capture-view").onclick=()=>{
     const context=canvas.getContext("2d");
     if(!context) {
         $("#camera-status").textContent="Could not prepare an image for capture.";
-        return;
+        return Promise.resolve(false);
     }
     context.drawImage(preview,0,0,canvas.width,canvas.height);
-    canvas.toBlob(blob=>{
+    return new Promise(resolve=>canvas.toBlob(blob=>{
         if(!blob) {
             $("#camera-status").textContent="Could not capture this view. Try again.";
-            return;
+            resolve(false); return;
         }
         addPhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{
             type:"image/jpeg", lastModified:Date.now()
         })]);
-    },"image/jpeg",0.95);
+        if(automatic) $("#camera-status").textContent=
+            "Photo captured automatically. Rotate the tube for the next view.";
+        resolve(true);
+    },"image/jpeg",0.95));
+}
+$("#capture-view").onclick=()=>{
+    autoCaptured=cameraSample();
+    autoStableSince=0;
+    captureView();
 };
 $("#choose-photos").onclick=()=>{
     if(uploading || !initialized) return;
     $("#photos").value="";
     $("#photos").click();
+};
+$("#take-iphone-photo").onclick=()=>{
+    if(uploading || !initialized || photoQueue.length>=8) return;
+    $("#iphone-camera").value="";
+    $("#iphone-camera").click();
 };
 $("#clear-photos").onclick=clearPhotos;
 $("#upload").onclick=async()=>{
@@ -639,6 +753,11 @@ $("#photos").onchange=()=>{
     const files=Array.from($("#photos").files);
     if(files.length && !uploading) addPhotos(files);
     $("#photos").value="";
+};
+$("#iphone-camera").onchange=()=>{
+    const files=Array.from($("#iphone-camera").files);
+    if(files.length && !uploading) addPhotos(files);
+    $("#iphone-camera").value="";
 };
 window.addEventListener("beforeunload",event=>{
     if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
@@ -667,7 +786,7 @@ async function initialize() {
     renderPhotoQueue();
 }
 initialize();
-setInterval(refresh,2500);
+setInterval(refresh,1000);
 </script>
 <!-- review-export-v11 -->
 </body>

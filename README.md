@@ -44,29 +44,36 @@ Event Wi-Fi may prevent devices from reaching one another. The iPhone hotspot pr
 ## Using the scanner
 
 1. Photograph **one tube at a time**.
-2. Connect the webcam to the computer opening the scanner page, select it, and
-   choose **Start camera**. Allow camera access when prompted.
-3. Hold the tube still for each shot and rotate it by hand between shots.
+2. On iPhone, choose **Take photo with iPhone** for each view; Safari opens
+   the phone camera and adds the photo to the staged views. On a computer,
+   connect the webcam, select it, and choose **Start camera**. Allow access
+   when prompted.
+3. With the webcam, center the printed label in the guide and hold the tube
+   steady. **Auto capture** is on by default and takes a photo after the image
+   looks detailed and stays still for about a second. Rotate the tube before
+   the next automatic photo. You can turn auto capture off or use **Capture
+   view** at any time. On iPhone, take each photo with the phone camera.
+4. Rotate the tube by hand between shots.
    Capture several focused, slightly overlapping views if the label wraps
    around the tube. Use soft, even lighting to reduce glare.
-4. Check the staged thumbnails, download any view you want to send separately,
+5. Check the staged thumbnails, download any view you want to send separately,
    remove any poor views, and choose **Upload sample**. You can also add
    existing photos before uploading. After upload, download originals from
    **View original photos** on the sample card.
-5. Check the detected label type and suggested fields.
-6. Correct missing or inaccurate values.
-7. Tap **Confirm and save**.
-8. Download the CSV or tap **Next tube**.
+6. Check the detected label type and suggested fields.
+7. Correct missing or inaccurate values.
+8. Tap **Confirm and save**.
+9. Download the CSV or tap **Next tube**.
 
 Limits: **8 photos per upload, 10 MB per photo**. Supported formats: JPG, PNG, and WebP.
 Camera captures are full-frame JPEGs at the webcam's preview resolution
 (requested up to 1280×720). All views are sent together through Andrew's
 existing upload endpoint and kept as original photos for review.
 
-Webcam preview requires a secure browser context: open the scanner over HTTPS
-or from `localhost`. The current plain-HTTP Pi address does not grant webcam
-access; use **Add existing photos** there unless the page is available through
-HTTPS.
+Computer webcam preview requires a secure browser context: open the scanner
+over HTTPS or from `localhost`. The current plain-HTTP Pi address does not
+grant webcam preview access; use **Take photo with iPhone** or
+**Add existing photos** there instead.
 
 On iPhone, if photos arrive as unsupported HEIC files, select:
 
@@ -314,6 +321,9 @@ A successful test on a flat label does not establish accuracy on curved tube pho
 ### Reading is slow
 
 The Pi processes one OCR request at a time. Avoid running standalone OCR tests while the server is reading.
+For a faster first result, upload the smallest set of clear, distinct views that
+shows the whole label (often two or three). Each extra photo adds barcode and
+OCR work. Keep additional views when a field is hidden or wraps around the tube.
 
 Observed development measurements:
 
