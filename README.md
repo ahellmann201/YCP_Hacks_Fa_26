@@ -1,4 +1,10 @@
-# Three-Tube Sample Scanner
+# LRS-3 — Label Reading System
+
+![LRS-3 logo: three sample tubes inside a scanning frame, built for the MRG Laboratories Challenge](docs/assets/lrs-3-logo.png)
+
+**Three tubes. One scan. Clear sample records.**
+
+[Download the LRS-3 logo (PNG)](docs/assets/lrs-3-logo.png)
 
 A motorized sample-label scanner built for the MRG Laboratories challenge: photograph three tubes, save each tube as an independent sample, read its label, review uncertain fields, and export a CSV.
 
