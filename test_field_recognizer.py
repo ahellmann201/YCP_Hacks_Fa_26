@@ -8,8 +8,9 @@ class FieldReaderTests(unittest.TestCase):
     def test_thread_setting_is_bounded_and_defaults_to_one(self):
         with patch.dict('os.environ', {}, clear=True):
             self.assertEqual(ocr_threads(), 1)
-        with patch.dict('os.environ', {'SCANNER_OCR_THREADS':'2'}):
-            self.assertEqual(ocr_threads(), 2)
+        for count in (1,2,3,4):
+            with patch.dict('os.environ', {'SCANNER_OCR_THREADS':str(count)}):
+                self.assertEqual(ocr_threads(), count)
         with patch.dict('os.environ', {'SCANNER_OCR_THREADS':'8'}):
             with self.assertRaises(ValueError):
                 ocr_threads()

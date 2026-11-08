@@ -1,4 +1,4 @@
-"""Compare one/two OCR threads on saved tube photos without changing records (Linux)."""
+"""Compare OCR thread settings on saved tube photos without changing records (Linux)."""
 import argparse
 import json
 import os
@@ -52,9 +52,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tube', type=Path, help='Saved uploads/<record-id> folder; default latest tube')
     parser.add_argument('--repeats', type=int, default=2)
+    parser.add_argument('--thread-counts', type=int, nargs='+', choices=[1,2,3,4], default=[2,3,4],
+                        help='Thread counts to compare (default: 2 3 4)')
     parser.add_argument('--output', type=Path, default=BASE/'thread-benchmark-results.json')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
-    parser.add_argument('--threads', type=int, choices=[1,2], default=1, help=argparse.SUPPRESS)
+    parser.add_argument('--threads', type=int, choices=[1,2,3,4], default=1, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not sys.platform.startswith('linux'):
         parser.error('Run this full-tube benchmark on the Linux Pi.')
@@ -69,9 +71,10 @@ def main():
         print(json.dumps(worker(args)))
         return
     runs = []
+    counts = list(dict.fromkeys(args.thread_counts))
     for repeat in range(args.repeats):
         # Alternate order to reduce systematic filesystem-cache/order bias.
-        for threads in ([1,2] if repeat%2 == 0 else [2,1]):
+        for threads in (counts if repeat%2 == 0 else list(reversed(counts))):
             print(f'Testing {threads} thread(s), repeat {repeat+1}/{args.repeats} ...', flush=True)
             completed = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker',
                 '--tube', str(args.tube.resolve()), '--threads', str(threads)], capture_output=True, text=True)
@@ -82,7 +85,7 @@ def main():
             print(f"{result['seconds']:.1f}s/tube; OCR worker peak {result['ocr_worker_peak_mib']:.1f} MiB", flush=True)
             args.output.write_text(json.dumps({'runs':runs}, indent=2))
     summary = {str(n):{'mean_seconds':statistics.mean(r['seconds'] for r in runs if r['threads']==n),
-                       'peak_ocr_worker_mib':max(r['ocr_worker_peak_mib'] for r in runs if r['threads']==n)} for n in [1,2]}
+                       'peak_ocr_worker_mib':max(r['ocr_worker_peak_mib'] for r in runs if r['threads']==n)} for n in counts}
     reference = (runs[0]['label_type'], runs[0]['suggestions'], runs[0]['photo_errors'])
     same = all((r['label_type'], r['suggestions'], r['photo_errors']) == reference for r in runs)
     report = {'summary':summary, 'same_field_outputs':same, 'runs':runs,
