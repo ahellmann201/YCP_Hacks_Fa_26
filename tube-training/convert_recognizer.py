@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+import yaml
 
 
 def main():
@@ -25,7 +26,10 @@ def main():
         '--opset_version','14','--enable_onnx_checker','True','--optimize_tool','None'],check=True)
     model=out/'recognizer.onnx'
     if not model.is_file() or not model.stat().st_size:raise RuntimeError('Converter did not create a model')
-    shutil.copy2(repo/'ppocr/utils/dict/ppocrv5_dict.txt',out/'characters.txt')
+    config=yaml.safe_load((run/'finetune.yml').read_text(encoding='utf-8'))
+    dictionary=Path(config['Global']['character_dict_path'])
+    if not dictionary.is_absolute():dictionary=repo/dictionary
+    shutil.copy2(dictionary,out/'characters.txt')
     (out/'checksums.json').write_text(json.dumps({name:hashlib.sha256((out/name).read_bytes()).hexdigest()
         for name in ['recognizer.onnx','characters.txt']},indent=2))
     print('Converted. Run verify_onnx_conversion.py before deployment:',model)

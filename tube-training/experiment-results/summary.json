@@ -1,0 +1,66 @@
+{
+  "training_crops": 44,
+  "validation_crops": 9,
+  "validation_tubes": 4,
+  "results": [
+    {
+      "experiment": "cleaned_head",
+      "stage": "before_training",
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.19642857142857142
+    },
+    {
+      "experiment": "cleaned_head",
+      "stage": "after_training",
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.14285714285714285
+    },
+    {
+      "experiment": "augmented_head",
+      "stage": "after_training",
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.14285714285714285
+    },
+    {
+      "experiment": "partial_backbone",
+      "stage": "after_training",
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.125
+    },
+    {
+      "experiment": "english_head",
+      "stage": "before_training",
+      "fields": 9,
+      "raw_correct": 4,
+      "after_date_formatting_correct": 4,
+      "character_error_rate": 0.14285714285714285
+    },
+    {
+      "experiment": "english_head",
+      "stage": "after_training",
+      "fields": 9,
+      "raw_correct": 5,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.10714285714285714
+    },
+    {
+      "experiment": "english_partial",
+      "stage": "after_training",
+      "fields": 9,
+      "raw_correct": 5,
+      "after_date_formatting_correct": 5,
+      "character_error_rate": 0.10714285714285714
+    }
+  ],
+  "selected_experiment": "english_head",
+  "selection_reason": "Best raw exact match and CER, tied with english_partial; keep simpler head-only stage.",
+  "limitations": "Development validation used repeatedly for checkpoint selection, no Large-label validation or independent final test."
+}

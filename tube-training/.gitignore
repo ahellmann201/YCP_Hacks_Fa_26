@@ -19,6 +19,10 @@ backups/
 model-export/
 model-comparison-report*/
 model-comparison-cache/
+experiments*/
+cleaned-training*/
+crop-cleanup/
+en_PP-OCRv5_mobile_rec_pretrained.pdparams
 baseline-report*/
 PaddleOCR/
 *.pdparams

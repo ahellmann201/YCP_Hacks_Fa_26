@@ -65,6 +65,8 @@ This saves per-field predictions for original and trained checkpoints. Report ra
 
 ## Current experiment results
 
+The newer [cleaned-data and English fine-tuning experiments](TRAINING_EXPERIMENTS.md) completed all five stages. The selected English head-only candidate gets 5/9 raw exact matches, versus 4/9 originally, with character error rate 10.71% versus 19.64%. Date-formatted accuracy remains 5/9. These are preliminary development measurements; the Pi app still uses its existing recognizer.
+
 The local dataset contained 38 tube folders / 114 photos, with 67 training and 9 validation recognition crops. After ten epochs, raw validation exact matches stayed at 4/9; mean normalized edit similarity increased from 0.798942 to 0.839065. The validation set has only four Small-label tubes. These are preliminary development results, not proof of general accuracy, Large-label accuracy or writer-independent performance. Additional unseen tubes are needed for a final test.
 
 `date_formats.py` formats full dates as `MM/DD/YYYY` and configured month/year values as `MM/YYYY`, retaining raw values. Two-digit years use 20xx. Two-part month/year interpretation is flagged as an assumption; merged OCR digits and impossible dates require correction. This formatter is not connected to the Pi app yet.

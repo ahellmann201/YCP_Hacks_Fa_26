@@ -1,0 +1,32 @@
+{
+  "architecture": "en_PP-OCRv5_mobile_rec",
+  "format": "ONNX",
+  "opset": 14,
+  "training_crops": 44,
+  "validation_crops": 9,
+  "validation_tubes": 4,
+  "validation_exact_matches": 5,
+  "validation_after_date_formatting_matches": 5,
+  "validation_character_error_rate": 0.10714285714285714,
+  "training_epochs": 5,
+  "training": "English head fine-tuning; backbone and normalization frozen; mild augmentation",
+  "onnx_bytes": 7850705,
+  "paddle_onnx_prediction_matches": 9,
+  "standalone_helper_prediction_matches": 9,
+  "training_paddle": "3.2.2 GPU",
+  "conversion_paddle": "3.1.1 CPU",
+  "converter": "paddle2onnx 2.1.0",
+  "onnxruntime_validation": "1.31.1 CPU",
+  "input_layout": "NCHW BGR float32",
+  "recommended_input_shape": [
+    1,
+    3,
+    48,
+    320
+  ],
+  "normalization": "Resize aspect-preserving height 48, cap width 320; pixel/255, subtract 0.5, divide 0.5; zero-pad right",
+  "ctc_dictionary": "blank index 0, characters.txt lines, then trailing space",
+  "pi_benchmarked": false,
+  "app_integrated": false,
+  "limitations": "Development validation repeatedly used for checkpoint selection, four Small-label tubes only; assistant-transcribed labels not independently verified."
+}
