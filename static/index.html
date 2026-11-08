@@ -23,6 +23,7 @@ body {
 .crop-originals { display:grid; gap:10px; }
 .crop-originals a { display:block; font-size:14px; }
 .crop-originals img { display:block; width:100%; max-height:200px; object-fit:contain; background:white; }
+.startup-choice { padding:16px; border:2px solid #1763c6; border-radius:10px; margin:12px 0; background:#f3f7ff; }
 h1,h2 { margin-top:0; }
 button,.button {
     display:inline-block; padding:13px 18px; margin:5px 5px 5px 0;
@@ -55,6 +56,14 @@ summary { cursor:pointer; padding:12px 0; }
 <body>
 <div class="toolbar">
     <h1>Sample Scanner</h1>
+    <div id="session-choice" class="startup-choice" hidden role="dialog" aria-labelledby="session-choice-title">
+        <h2 id="session-choice-title">Resume an unfinished session?</h2>
+        <p class="muted">Your previous photos and saved edits are still available. Resume a session or start a new one.</p>
+        <label>Unfinished session<select id="unfinished-sessions" class="field"></select></label>
+        <button id="resume-session" type="button">Resume selected session</button>
+        <button id="new-session" type="button">Start new session</button>
+        <p class="muted">Starting a new session keeps the old one available. Finish and download its CSV to clear its photos.</p>
+    </div>
     <input id="photos" type="file"
         accept="image/jpeg,image/png,image/webp,.zip,application/zip,application/x-zip-compressed" multiple hidden>
     <button id="upload" type="button">Upload samples</button>
@@ -87,8 +96,8 @@ summary { cursor:pointer; padding:12px 0; }
         Only confirmed tubes enter the CSV.
     </p>
 </div>
-<div id="waiting"></div>
 <div id="cards"></div>
+<div id="waiting"></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -150,7 +159,7 @@ function required(c) {
     const keys=["sample_id","date_sampled","date_received","machine","component"];
     if(c.type.value==="small") keys.push("serial_number");
     if(c.type.value==="large") keys.push("reference_lube");
-    return keys;
+    return keys.filter(key=>!(c.blankFields||[]).includes(key));
 }
 function values(c) {
     const result={};
@@ -169,7 +178,7 @@ function fieldStates(c) {
         c.inputs[key].readOnly=unused;
         if(!unused) {
             if(!fields[key] && needed.includes(key)) error="Check the label.";
-            if(key==="date_sampled" && !fields[key])
+            if(key==="date_sampled" && !fields[key] && !(c.blankFields||[]).includes(key))
                 error="Check the date as written on the label.";
             if(key==="date_received" && !validReceived(fields[key]))
                 error="Enter a valid received date.";
@@ -179,7 +188,8 @@ function fieldStates(c) {
         }
         c.inputs[key].classList.toggle("bad",!!error);
         c.inputs[key].setAttribute("aria-invalid",error?"true":"false");
-        c.hints[key].textContent=error || (c.checkReasons?.[key]||[]).join(" ");
+        c.hints[key].textContent=error || (c.checkReasons?.[key]||[]).join(" ") ||
+            ((c.blankFields||[]).includes(key) && !fields[key]?"Detected blank — available here if you need to correct it.":"");
         if(error && c.otherFields?.contains(c.inputs[key])) c.moreDetails.open=true;
     });
     c.el.classList.toggle("confirmed",c.check.checked && !c.dirty && !c.saveError);
@@ -285,7 +295,7 @@ function addCard(job) {
     }
     if(!review?.fields || cards.has(job.record_id)) return;
     const c={
-        id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, version:0,
+        id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, blankFields:review.blank_fields||[], version:0,
         dirty:false, saveError:false, operations:0,
         serverConfirmed:!!review.confirmed, tail:Promise.resolve(), timer:null
     };
@@ -470,6 +480,7 @@ function addCard(job) {
         saveCard(c,c.check.checked);
     };
     c.type.onchange=()=>{
+        c.blankFields=[];
         c.moreDetails.open=true;
         if(c.type.value==="small") c.inputs.reference_lube.value="";
         if(c.type.value==="large") c.inputs.serial_number.value="";
@@ -625,19 +636,44 @@ async function initialize() {
         const app=await api("/app"); bootId=app.boot_id;
         let saved=null;
         try { saved=JSON.parse(sessionStorage.getItem(STORAGE)||"null"); } catch(_) {}
-        if(saved?.boot===bootId && saved.session) {
-            sessionId=saved.session;
-            await refresh();
-        } else {
-            try { sessionStorage.removeItem(STORAGE); } catch(_) {}
+        const unfinished=await api("/sessions");
+        if(unfinished.sessions?.length) {
+            const select=$("#unfinished-sessions"); select.replaceChildren();
+            unfinished.sessions.forEach(previous=>{
+                const option=document.createElement("option"); option.value=previous.id;
+                option.textContent=`${previous.name} · ${previous.tubes} tubes · ${previous.done} processed · ${previous.queued+previous.processing} waiting/processing`;
+                select.append(option);
+            });
+            if(unfinished.sessions.some(previous=>previous.id===saved?.session)) select.value=saved.session;
+            $("#session-choice").hidden=false;
+            say("Choose a session above before uploading.");
+            return;
         }
+        try { sessionStorage.removeItem(STORAGE); } catch(_) {}
         initialized=true;
-        say(sessionId?"Current session restored.":"Ready for a fresh scanning session.");
+        say("Ready for a fresh scanning session.");
     } catch(error) {
         say("Could not connect. Refresh the page to retry.\n"+error.message,true);
     }
     renderBar();
 }
+async function chooseSession(resume) {
+    $("#resume-session").disabled=true; $("#new-session").disabled=true;
+    try {
+        const selected=resume
+            ? await api(`/sessions/${$("#unfinished-sessions").value}`)
+            : await api("/sessions",post({name:"Samples "+new Date().toLocaleString()}));
+        if(selected.finished_at) throw new Error("That session has finished. Refresh to choose another.");
+        session=selected; sessionId=selected.id; remember();
+        initialized=true; $("#session-choice").hidden=true;
+        renderSession(); say(resume?"Unfinished session resumed.":"New session started. Your older session is preserved.");
+    } catch(error) { say(error.message,true); }
+    finally {
+        $("#resume-session").disabled=false; $("#new-session").disabled=false; renderBar();
+    }
+}
+$("#resume-session").onclick=()=>chooseSession(true);
+$("#new-session").onclick=()=>chooseSession(false);
 initialize();
 setInterval(refresh,2500);
 </script>

@@ -13,6 +13,18 @@ from uuid import uuid4
 from session_store import SessionStore, SessionError
 
 class QueueStore(SessionStore):
+    def unfinished(self):
+        with self.connection() as db:
+            rows = db.execute('''SELECT s.id, s.name, s.created_at,
+                MAX(t.added_at) AS last_activity, COUNT(*) AS tubes,
+                SUM(j.state='queued') AS queued, SUM(j.state='processing') AS processing,
+                SUM(j.state='done') AS done, SUM(j.state='error') AS errors
+                FROM sessions s JOIN session_samples t ON t.session_id=s.id
+                JOIN scan_jobs j ON j.record_id=t.record_id
+                WHERE s.finished_at IS NULL GROUP BY s.id
+                ORDER BY last_activity DESC, s.created_at DESC LIMIT 100''').fetchall()
+            return [dict(row) for row in rows]
+
     def finish_for_export(self, session_id, export_hash, include_unreviewed, render_csv):
         with self.connection(write=True) as db:
             self._session(db, session_id)
@@ -177,7 +189,7 @@ class QueueStore(SessionStore):
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
-                            "image_count", "evidence", "source_folder", "field_checks"
+                            "image_count", "evidence", "source_folder", "field_checks", "blank_fields"
                         )
                     } if review else None,
                 })
@@ -357,6 +369,7 @@ class ScannerQueue:
             "fields": fields, "raw_suggestions": raw,
             "image_count": len(names),
             "source_folder": sample.get('source_folder'),
+            "blank_fields": result.get('blank_fields',[]),
         }
         from review_checks import field_checks
         review['field_checks'] = field_checks(fields, kind, result)

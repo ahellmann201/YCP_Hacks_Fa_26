@@ -21,8 +21,8 @@ def tight_large_transform(image, barcode, template):
     right, bottom = points.max(axis=0)/[width,height]
     # A wide, upright photo plus the expected lower-right linear barcode
     # identifies a cropped flat label, not an ordinary full camera frame.
-    if not (.40 <= left < right <= .96 and .48 <= top < bottom <= .99
-            and .17 <= right-left <= .55 and .06 <= bottom-top <= .38):
+    if not (.28 <= left < right <= .96 and .48 <= top < bottom <= .99
+            and .17 <= right-left <= .65 and .06 <= bottom-top <= .38):
         return None
     if abs(p.top_left.y-p.top_right.y)/height > .10:
         return None

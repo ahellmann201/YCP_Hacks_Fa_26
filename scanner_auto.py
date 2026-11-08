@@ -6,6 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from ocr_settings import ocr_threads
+from field_text import strip_heading, visually_empty
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -163,7 +164,7 @@ def raw_values(text, label_type):
         match = re.search(pattern, text, re.I)
 
         if match:
-            values[name] = clean(match.group(1))
+            values[name] = strip_heading(clean(match.group(1)),name,label_type)
 
     match = re.search(
         r"\bDate\s*:?\s*(.*)",
@@ -662,6 +663,11 @@ def process(job):
                     if score is None and scores:
                         score = min(scores)
                     entry.setdefault('field_scores', {})[field] = score
+                    recognized = strip_heading(recognized,field,label_type)
+                    if (not recognized and entry.get('alignment_method')=='tight_large_label'
+                        and not any(w.startswith(field+':') for w in entry['warnings'])
+                        and visually_empty(crop)):
+                        entry.setdefault('blank_fields',[]).append(field)
 
                     if field == "date_sampled":
                         values[field] = valid_written_date(
@@ -827,6 +833,8 @@ def process(job):
 
     return {
         "ocr_threads": ocr_threads(),
+        "blank_fields": [field for field in FIELDS if not suggestions[field] and results
+            and all(not entry.get('error') and field in entry.get('blank_fields',[]) for entry in results)],
         "label_type": label_type,
         "suggestions": suggestions,
         "alternatives": alternatives,

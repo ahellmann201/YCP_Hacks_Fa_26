@@ -115,6 +115,11 @@ def create_session(value: NewSession):
     session = STORE.create(value.name)
     return status(session["id"])
 
+
+@app.get('/sessions')
+def unfinished_sessions():
+    return {'sessions':STORE.unfinished()}
+
 @app.get("/sessions/{session_id}")
 def session_status(session_id: str):
     return status(session_id)

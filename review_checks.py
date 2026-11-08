@@ -9,6 +9,9 @@ def field_checks(fields, kind, result):
     for key in keys:
         reasons = []
         value = str(fields.get(key) or '').strip()
+        if not value and key in result.get('blank_fields',[]):
+            checks[key]=[]
+            continue
         if not value:
             reasons.append('Missing reading — check whether this field is blank.')
         if kind not in {'small', 'large'}:
