@@ -20,5 +20,6 @@ for address in $(hostname -I); do
         echo "  http://$address:${PORT:-8000}"
     fi
 done
-echo "Keep this terminal open. Press Ctrl+C to stop; unfinished work is retained."
+echo "Keep this terminal open. Press Ctrl+C to stop."
+echo "The uploads folder is emptied the next time the server starts. Download a CSV first if you still need the photos."
 exec .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --port "${PORT:-8000}"

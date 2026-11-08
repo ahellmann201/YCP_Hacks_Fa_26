@@ -18,12 +18,12 @@ SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --
 ```
 
 1. **Open the page:** visit `http://PI_ADDRESS:8000` from the phone/Dell. Use `hostname -I` to find current addresses. The hotspot previously assigned `172.20.10.2`; configured direct Dell Ethernet uses `192.168.50.2`. Use a network the viewing device can reach. **Do not browse to `0.0.0.0`.**
-2. **Choose a session:** select **Resume selected session** or **Start new session** if unfinished work exists. Saved edits survive browser/server restarts. Starting new preserves older work.
+2. **Choose a session:** the page starts a new session. Uploaded photos are deleted each time the server starts, so download a CSV before stopping if you still need the pictures. Field text already saved in SQLite stays in the database.
 3. **Upload samples:** select 1–8 JPG/PNG/WebP photos of **one tube**, or **one ZIP** containing a folder per tube. For a short demo, use 3–5 clear tubes; use 10–20 for a longer batch. Do not mix ZIPs and loose photos.
 4. **Review as results arrive:** ready cards appear above the processing list. Flagged fields have matching crops; other fields and all originals are expandable. Correct OCR values and select **All good — include in CSV**. Confirmed cards disappear. Populated/high-confidence fields can still be wrong.
 5. **Show the top metrics:** average processing seconds per tube excludes transfer, queue wait and manual review. Field accuracy is **correct fields / applicable fields × 100**, comparing original readings with confirmed corrections, not model confidence. Date Received and unused fields do not count.
 6. **Export:** **Download current CSV** keeps photos for continued work. **Download CSV & finish session** receives the CSV in the browser, starts its download and clears that session's photos/crops. Keep the downloaded file. To intentionally skip review, select **Include unreviewed samples in CSV**. Pending/failed tubes must be resolved before finishing. CSV field records remain in SQLite.
-7. **Stop:** press **Ctrl+C** in the server terminal. Closing the page or stopping the server preserves unfinished sessions. To power the Pi off afterwards, run `sudo poweroff` and let shutdown complete before removing power.
+7. **Stop:** press **Ctrl+C** in the server terminal. Closing the page does not delete photos. Starting the server again empties `uploads/`. To power the Pi off afterwards, run `sudo poweroff` and let shutdown complete before removing power.
 
 ZIP structure:
 
@@ -158,7 +158,7 @@ If VS Code still shows the old root files and many `M`/`A`/`U` markers, use the 
 | Missing model / OCR worker stops | Run `tools/prepare_models.py --check`; prepare online if needed. Check memory with `free -h`. |
 | Wrong crops or text | Check the crop and all originals. Updated crop code needs new processing; it does not regenerate old crops. |
 | HEIC import fails | Install `requirements-heic.txt`, restart and retry. Validation failures queue none of the batch. |
-| Files remain after closing | Closing preserves unfinished work. Finish/export clears only the current session; finish older sessions separately. |
+| Photos gone after a restart | Startup empties `uploads/`. Download the CSV before stopping the server if those photos are still needed. |
 
 Local page check from a second Pi terminal:
 
@@ -201,7 +201,7 @@ Valid full dates accept `.`, `-` or `/` and display/export as **MM/DD/YYYY**. Tw
 | `tube-training/` | Separate labeling, Windows training/conversion tools and their tests |
 | `trained-model/` | Offline models, dictionaries and provenance |
 | `legacy/` | Earlier unused OCR worker |
-| `uploads/`, `scanner.sqlite3` | Local photo/crop files and session/field records; ignored by Git |
+| `uploads/`, `scanner.sqlite3` | Local photo/crop files and session/field records; ignored by Git. `uploads/` is emptied when the server starts. |
 
 Run from the repository root:
 

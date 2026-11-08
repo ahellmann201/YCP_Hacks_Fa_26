@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 from background_scanner import QueueStore
 from session_store import SessionError
-from session_cleanup import clear_uploads
+from session_cleanup import clear_uploads, empty_uploads
 from review_checks import field_checks
 from label_preview import build_preview
 
@@ -70,6 +70,33 @@ class ReviewCleanupTests(unittest.TestCase):
             self.assertFalse((root/('a'*32)).exists())
             self.assertTrue((root/('b'*32)/'image.jpg').exists())
             clear_uploads(root,['a'*32])  # Retry after a lost response is safe.
+
+    def test_startup_empties_uploads_without_following_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base=Path(temporary)
+            uploads=base/'uploads'
+            outside=base/'outside'
+            uploads.mkdir(); outside.mkdir()
+            (uploads/'note.txt').write_text('photo')
+            (uploads/('a'*32)).mkdir()
+            (outside/'keep.txt').write_text('keep')
+            (uploads/'linked').symlink_to(outside, target_is_directory=True)
+            removed=empty_uploads(uploads)
+            self.assertEqual(removed, 3)
+            self.assertTrue(uploads.is_dir())
+            self.assertEqual(list(uploads.iterdir()), [])
+            self.assertTrue((outside/'keep.txt').is_file())
+
+    def test_startup_closes_sessions_that_lost_their_photos(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store=QueueStore(Path(temporary)/'scanner.sqlite3')
+            sid=store.create('test')['id']; record='c'*32
+            store.register(sid, record)
+            store.close_after_upload_reset()
+            self.assertTrue(store.get(sid)['finished_at'])
+            self.assertEqual(store.unfinished(), [])
+            with self.assertRaises(SessionError):
+                store.retry(sid, record)
 
 
 if __name__=='__main__':

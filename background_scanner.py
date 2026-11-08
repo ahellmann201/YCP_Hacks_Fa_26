@@ -96,6 +96,21 @@ class QueueStore(SessionStore):
                 WHERE state='processing'
             """)
 
+    def close_after_upload_reset(self):
+        """Photos were removed. Do not resume OCR or offer those sessions again."""
+        with self.connection(write=True) as db:
+            db.execute("""
+                UPDATE scan_jobs
+                SET state='error', error='Uploads were cleared on startup',
+                    queued_at=NULL, timing_json=NULL
+                WHERE state IN ('queued', 'processing')
+            """)
+            db.execute("""
+                UPDATE sessions
+                SET finished_at=COALESCE(finished_at, ?)
+                WHERE finished_at IS NULL
+            """, (self.now(),))
+
     def claim(self):
         with self.connection(write=True) as db:
             row = db.execute("""

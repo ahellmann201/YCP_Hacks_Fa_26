@@ -21,6 +21,7 @@ from background_scanner import QueueStore, ScannerQueue
 from session_store import SessionError
 from zip_import import prepare_archive, ImportError as BatchImportError
 from sample_dates import normalize_sample_date, sampled_date_issue
+from session_cleanup import empty_uploads
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
@@ -31,6 +32,9 @@ BOOT_ID = uuid4().hex
 
 @asynccontextmanager
 async def lifespan(app):
+    removed = empty_uploads(UPLOADS)
+    STORE.close_after_upload_reset()
+    logging.info("Cleared %s upload entries on startup", removed)
     QUEUE.start()
     try:
         yield
