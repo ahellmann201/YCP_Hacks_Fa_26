@@ -259,6 +259,7 @@ def prepare_field_crop(
     field,
     region,
     warnings,
+    barcode_box=None,
 ):
     import numpy as np
 
@@ -279,6 +280,11 @@ def prepare_field_crop(
     top = max(0, round(y1 * height))
     right = min(aligned.shape[1], round(x2 * width))
     bottom = min(aligned.shape[0], round(y2 * height))
+
+    if field=='date_sampled' and barcode_box:
+        bx1,by1,_,by2=barcode_box
+        if min(bottom,by2)-max(top,by1)>max(2,(bottom-top)*.10) and bx1>left+50:
+            right=min(right,bx1-4)
 
     crop = aligned[top:bottom, left:right]
     valid = coverage[top:bottom, left:right]
@@ -328,6 +334,9 @@ def prepare_field_crop(
 
         warnings.append(f'{field}: crop reaches the photo edge. Verify the complete value against the original.')
 
+    if field=='date_sampled':
+        from crop_adjustments import focus_date_ink
+        crop=focus_date_ink(crop)
     return crop
 
 
@@ -621,6 +630,7 @@ def process(job):
                         field,
                         region,
                         entry["warnings"],
+                        barcode_box=entry.get('barcode_box'),
                     )
 
                     if crop is None:

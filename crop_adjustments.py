@@ -57,3 +57,30 @@ def prefer_thinned_reading(original,score,candidate,candidate_score,field,receiv
     if field=='date_sampled' and (not extract_written_date(candidate) or sampled_date_issue(candidate,received)):
         return False
     return True
+
+
+def focus_date_ink(crop):
+    """Tighten evidence around tall date strokes, retaining the original pixels."""
+    import cv2
+    import numpy as np
+    gray=cv2.cvtColor(crop,cv2.COLOR_RGB2GRAY)
+    height,width=gray.shape
+    if height<20 or width<40:
+        return crop
+    ink=(gray<float(np.median(gray))-35).astype('uint8')*255
+    rule=cv2.morphologyEx(ink,cv2.MORPH_OPEN,np.ones((1,max(25,int(width*.55))),np.uint8))
+    foreground=cv2.bitwise_and(ink,cv2.bitwise_not(rule))
+    count,_,stats,_=cv2.connectedComponentsWithStats(foreground,8)
+    components=[(x,y,w,h,area) for x,y,w,h,area in stats[1:]
+                if h>=height*.18 and w>=2 and area>=8 and not (w<3 and h>height*.9)]
+    if not components:
+        return crop
+    tallest=max(component[3] for component in components)
+    components=[c for c in components if c[3]>=tallest*.45]
+    left=min(c[0] for c in components);top=min(c[1] for c in components)
+    right=max(c[0]+c[2] for c in components);bottom=max(c[1]+c[3] for c in components)
+    if right-left<width*.35 or bottom-top<height*.25:
+        return crop
+    padding=max(3,round(height*.07))
+    return crop[max(0,top-padding):min(height,bottom+padding),
+                max(0,left-padding):min(width,right+padding)].copy()
