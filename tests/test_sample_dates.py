@@ -1,6 +1,6 @@
 import unittest
-from sample_dates import normalize_sample_date, same_sample_date
-from reading_quality import guard_readings
+from scanner.reading.sample_dates import normalize_sample_date, same_sample_date
+from scanner.reading.reading_quality import guard_readings
 
 
 class DateTests(unittest.TestCase):

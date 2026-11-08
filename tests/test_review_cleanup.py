@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from PIL import Image
-from background_scanner import QueueStore
-from session_store import SessionError
-from session_cleanup import clear_uploads, empty_uploads
-from review_checks import field_checks
-from label_preview import build_preview
+from scanner.queue.background_scanner import QueueStore
+from scanner.io.session_store import SessionError
+from scanner.io.session_cleanup import clear_uploads, empty_uploads
+from scanner.reading.review_checks import field_checks
+from scanner.vision.label_preview import build_preview
 
 
 def render(reviews):

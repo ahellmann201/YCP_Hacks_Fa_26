@@ -16,12 +16,13 @@ from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from background_scanner import QueueStore, ScannerQueue
-from session_store import SessionError
-from zip_import import prepare_archive, ImportError as BatchImportError
-from sample_dates import normalize_sample_date, sampled_date_issue
-from session_cleanup import empty_uploads
+from scanner.queue.background_scanner import QueueStore, ScannerQueue
+from scanner.io.session_store import SessionError
+from scanner.io.zip_import import prepare_archive, ImportError as BatchImportError
+from scanner.reading.sample_dates import normalize_sample_date, sampled_date_issue
+from scanner.io.session_cleanup import empty_uploads
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
@@ -42,6 +43,7 @@ async def lifespan(app):
         QUEUE.stop()
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 COLUMNS = [
     ("sample_id", "Sample ID"), ("date_sampled", "Date Sampled"),
@@ -162,7 +164,7 @@ def csv_bytes(reviews):
 
 @app.post('/sessions/{session_id}/finish-export')
 def finish_export(session_id: str, request: FinishExport):
-    from session_cleanup import clear_uploads
+    from scanner.io.session_cleanup import clear_uploads
     records = STORE.finish_for_export(session_id, request.export_hash,
                                      request.include_unreviewed, csv_bytes)
     try:

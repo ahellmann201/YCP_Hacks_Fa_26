@@ -192,8 +192,11 @@ Valid full dates accept `.`, `-` or `/` and display/export as **MM/DD/YYYY**. Tw
 
 | Location | Purpose |
 |---|---|
-| `main.py`, `static/` | FastAPI entry point and phone/browser interface |
-| Root Python helpers | Queue/storage, alignment/crops, field OCR, dates, review rules, ZIP import and cleanup; kept beside the entry point for Pi compatibility |
+| `main.py`, `static/` | FastAPI entry point, MRG logo, and phone/browser interface |
+| `scanner/queue/` | Background scan queue |
+| `scanner/io/` | Sessions, upload cleanup, and ZIP intake |
+| `scanner/vision/` | Label alignment, crops, and circled component marks |
+| `scanner/reading/` | OCR settings, field text, and the photo-reading pipeline |
 | `scripts/start_demo.sh` | Demo launcher; defaults to three OCR threads |
 | `tools/` | Model preparation, barcode/handwriting diagnostics, throughput benchmark |
 | `tests/` | App regression tests with disposable data |

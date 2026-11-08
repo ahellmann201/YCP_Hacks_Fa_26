@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace as NS
 import cv2
 import numpy as np
-from label_alignment import tight_large_transform, TIGHT_LARGE_FIELDS
+from scanner.vision.label_alignment import tight_large_transform, TIGHT_LARGE_FIELDS
 
 
 def barcode():

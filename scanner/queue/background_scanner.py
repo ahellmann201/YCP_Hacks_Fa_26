@@ -10,8 +10,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
-from session_store import SessionStore, SessionError
-from sample_dates import normalize_sample_date, same_sample_date
+from scanner.io.session_store import SessionStore, SessionError
+from scanner.reading.sample_dates import normalize_sample_date, same_sample_date
 
 class QueueStore(SessionStore):
     def unfinished(self):
@@ -65,7 +65,7 @@ class QueueStore(SessionStore):
         self.register_batch(session_id, [record_id],samples={record_id:sample} if sample else None)
 
     def register_batch(self, session_id, record_ids, samples=None):
-        from sample_identity import photo_fingerprint
+        from scanner.io.sample_identity import photo_fingerprint
         with self.connection(write=True) as db:
             self._active(db, session_id)
             for record_id in record_ids:
@@ -389,7 +389,7 @@ class ScannerQueue:
                 "debug_dir": str((folder / "analysis" / run_id).resolve()),
             }), encoding="utf-8")
             self.child([
-                sys.executable, str(self.base / "scanner_auto.py"),
+                sys.executable, str(self.base / "scanner" / "reading" / "scanner_auto.py"),
                 str(request), str(output),
             ], timeout=180 * len(names) + 60)
             result = json.loads(output.read_text(encoding="utf-8"))
@@ -425,7 +425,7 @@ class ScannerQueue:
             for key in ("machine", "component", "serial_number", "reference_lube"):
                 fields[key] = ""
 
-        from reading_quality import guard_readings
+        from scanner.reading.reading_quality import guard_readings
         ocr_fields=dict(fields)
         fields,candidates,withheld=guard_readings(fields,kind,result,sample['date_received'])
         review = {
@@ -439,12 +439,12 @@ class ScannerQueue:
             "source_folder": sample.get('source_folder'),
             "blank_fields": result.get('blank_fields',[]),
         }
-        from review_checks import field_checks
+        from scanner.reading.review_checks import field_checks
         review['field_checks'] = field_checks(fields, kind, result)
         for field,reasons in withheld.items():
             review['field_checks'].setdefault(field,[]).extend(reasons)
         try:
-            from label_preview import build_preview
+            from scanner.vision.label_preview import build_preview
             review["evidence"] = build_preview(folder, run_id, result, kind)
         except Exception:
             logging.exception("Could not build combined label view")

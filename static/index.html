@@ -16,21 +16,21 @@ try {
 * { box-sizing:border-box; }
 :root {
     color-scheme:light;
-    --bg:#f3f5f8; --text:#172334; --surface:#fff; --shadow:0 2px 8px #0001;
-    --metric:#eef4ff; --focus:#f8fafc; --image:#fff;
-    --accent:#1763c6; --on-accent:#fff; --soft:#e6eefb; --soft-text:#174d94;
-    --muted:#58677a; --danger:#b02020; --line:#d4dce5; --field-border:#aeb8c6;
-    --bad-border:#dc2626; --bad-bg:#fff1f2; --readonly:#f1f3f6; --placeholder:#687587;
-    --choice:#f3f7ff; --ok:#278347; --input:#fff; --link:#1763c6;
+    --bg:#e8eef4; --text:#072b4e; --surface:#fff; --shadow:0 2px 10px #072b4e24;
+    --metric:#e7f3e4; --focus:#f9fafb; --image:#fff;
+    --accent:#0c5509; --on-accent:#fff; --soft:#d7ead3; --soft-text:#0c5509;
+    --muted:#334155; --danger:#9f1239; --line:#cbd5e1; --field-border:#94a3b8;
+    --bad-border:#be123c; --bad-bg:#fff1f2; --readonly:#e2e8f0; --placeholder:#64748b;
+    --choice:#f3f7f2; --ok:#0c5509; --input:#fff; --link:#0c5509;
 }
 html[data-theme="dark"] {
     color-scheme:dark;
-    --bg:#10151d; --text:#e7eef7; --surface:#1b2431; --shadow:0 2px 12px #000a;
-    --metric:#1c2c44; --focus:#141c28; --image:#0d131c;
-    --accent:#3b82f6; --on-accent:#f8fbff; --soft:#24344d; --soft-text:#d3e4fb;
-    --muted:#a7b6c9; --danger:#ff9b9b; --line:#3a4a60; --field-border:#51647c;
-    --bad-border:#f87171; --bad-bg:#3f2228; --readonly:#121922; --placeholder:#93a4b8;
-    --choice:#172338; --ok:#4ade80; --input:#121922; --link:#8eb7ff;
+    --bg:#041525; --text:#f9fafb; --surface:#072b4e; --shadow:0 2px 12px #000a;
+    --metric:#0e3d16; --focus:#0a223c; --image:#041525;
+    --accent:#3f9a34; --on-accent:#f9fafb; --soft:#14361c; --soft-text:#c6ebc0;
+    --muted:#cbd5e1; --danger:#fda4af; --line:#1e4a73; --field-border:#3d6a94;
+    --bad-border:#fb7185; --bad-bg:#3f1d2a; --readonly:#061c33; --placeholder:#94a3b8;
+    --choice:#0a3358; --ok:#86efac; --input:#061c33; --link:#86efac;
 }
 body {
     font:17px Arial,sans-serif; background:var(--bg); color:var(--text);
@@ -40,12 +40,15 @@ a { color:var(--link); }
 .toolbar,.card {
     background:var(--surface); padding:20px; border-radius:12px; margin-bottom:18px;
 }
-.toolbar { position:sticky; top:0; z-index:5; box-shadow:var(--shadow); }
+.toolbar { position:sticky; top:0; z-index:5; box-shadow:var(--shadow); padding:12px 14px; }
+.toolbar h1 { font-size:22px; }
 .title-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.title-row h1 { margin:0; }
-.metrics { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
-.metric { flex:1 1 180px; padding:12px; background:var(--metric); border-radius:8px; }
-.metric strong { display:block; font-size:24px; margin:5px 0; }
+.brand { display:flex; align-items:center; gap:12px; min-width:0; }
+.brand img { height:42px; width:auto; background:#fff; border-radius:8px; padding:3px; }
+.title-row h1 { margin:0; color:var(--text); }
+.metrics { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.metric { flex:1 1 140px; padding:8px 10px; background:var(--metric); border-radius:8px; }
+.metric strong { display:block; font-size:20px; margin:2px 0; }
 .metric p { margin:0; }
 .focus-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; margin:14px 0; padding:12px; background:var(--focus); border-radius:8px; }
 .field-crop { width:100%; max-height:160px; object-fit:contain; background:var(--image); }
@@ -80,31 +83,33 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
-@media(max-width:600px) { .grid { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+    .grid { grid-template-columns:1fr; }
+    .brand img { height:42px; }
+}
 </style>
 </head>
 <body>
 <div class="toolbar">
     <div class="title-row">
-        <h1>Sample Scanner</h1>
+        <div class="brand">
+            <img src="/static/mrg-logo.jpg" alt="MRG Laboratories">
+            <h1>Sample Scanner</h1>
+        </div>
         <button id="theme" class="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
     </div>
     <div id="session-choice" class="startup-choice" hidden role="dialog" aria-labelledby="session-choice-title">
         <h2 id="session-choice-title">Resume an unfinished session?</h2>
-        <p class="muted">Your previous photos and saved edits are still available. Resume a session or start a new one.</p>
         <label>Unfinished session<select id="unfinished-sessions" class="field"></select></label>
         <button id="resume-session" type="button">Resume selected session</button>
         <button id="new-session" type="button">Start new session</button>
-        <p class="muted">Starting a new session keeps the old one available. Finish and download its CSV to clear its photos.</p>
     </div>
     <input id="photos" type="file"
         accept="image/jpeg,image/png,image/webp,.zip,application/zip,application/x-zip-compressed" multiple hidden>
     <button id="upload" type="button">Upload samples</button>
-    <p class="muted">Choose 1–8 photos of one tube, or one ZIP with a folder per tube.
-        Maximum 100 tubes, 250 MB ZIP, 10 MB per photo. HEIC needs optional Pi support.</p>
     <a id="download" class="button" hidden>Download current CSV</a>
     <button id="finish-export" type="button" hidden>Download CSV & finish session</button>
-    <label style="display:block;margin:12px 0;font-size:15px;">
+    <label style="display:block;margin:6px 0;font-size:15px;">
     <input id="include-unreviewed" type="checkbox">
     Include unreviewed samples in CSV
 </label>
@@ -119,15 +124,9 @@ summary { cursor:pointer; padding:12px 0; }
             <p id="accuracy-detail" class="muted">Confirm reviewed samples to measure accuracy.</p>
         </div>
     </div>
-    <p class="muted">Current session only. Timing excludes upload, queue wait and manual review.
-        Accuracy compares original readings with your “All good” fields, including confirmed blanks.
-        Date Received and unused fields are excluded; each applicable field counts equally.</p>
+    <p class="muted">Timing leaves out upload, waiting, and review; accuracy uses confirmed fields only, and a confident reading can still be wrong.</p>
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
-    <p class="muted">
-        Upload one tube at a time. Confirm finished cards with “All good”.
-        Only confirmed tubes enter the CSV.
-    </p>
 </div>
 <section id="review-section" aria-labelledby="review-title">
     <h2 id="review-title">Samples to review</h2>
@@ -337,11 +336,11 @@ function saveCard(c,confirmed) {
             c.check.checked=confirmed;
             c.el.hidden=confirmed;
             c.note.textContent=confirmed?"Confirmed — included in CSV.":"Changes saved. Check All good when ready.";
-            if(confirmed) requestAnimationFrame(scrollToReview);
         }
     }).catch(error=>{
         c.saveError=true;
         c.check.checked=false;
+        c.el.hidden=false;
         c.retry.hidden=false;
         c.note.textContent="Could not save: "+error.message;
     }).finally(()=>{
@@ -575,6 +574,8 @@ function addCard(job) {
                 c.check.checked=false; c.note.textContent=error;
                 fieldStates(c); return;
             }
+            c.el.hidden=true;
+            requestAnimationFrame(scrollToReview);
         }
         c.version++; c.dirty=true;
         saveCard(c,c.check.checked);

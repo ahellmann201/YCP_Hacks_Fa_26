@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 import cv2
 import numpy as np
-from reading_quality import crop_quality, guard_readings
-from background_scanner import QueueStore, ScannerQueue
+from scanner.reading.reading_quality import crop_quality, guard_readings
+from scanner.queue.background_scanner import QueueStore, ScannerQueue
 
 
 class QualityTests(unittest.TestCase):

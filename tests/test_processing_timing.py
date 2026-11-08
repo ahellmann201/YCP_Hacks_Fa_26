@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from background_scanner import QueueStore
+from scanner.queue.background_scanner import QueueStore
 
 
 class TimingTests(unittest.TestCase):

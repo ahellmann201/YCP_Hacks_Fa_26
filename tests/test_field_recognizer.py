@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
-from field_recognizer import FieldReader
-from ocr_settings import ocr_threads
+from scanner.reading.field_recognizer import FieldReader
+from scanner.reading.ocr_settings import ocr_threads
 
 
 class FieldReaderTests(unittest.TestCase):

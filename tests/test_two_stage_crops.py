@@ -1,7 +1,7 @@
 import unittest
 import cv2
 import numpy as np
-from crop_adjustments import tighten_field_right,can_fill_empty_from_focus
+from scanner.vision.crop_adjustments import tighten_field_right,can_fill_empty_from_focus
 
 
 class TwoStageTests(unittest.TestCase):

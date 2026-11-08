@@ -1,6 +1,6 @@
 """Autofill OCR readings with review hints; never guess corrections or call smears blank."""
 import math
-from sample_dates import same_sample_date, sampled_date_issue
+from scanner.reading.sample_dates import same_sample_date, sampled_date_issue
 
 
 def crop_quality(crop):

@@ -18,9 +18,9 @@ def main():
         socket.socket.connect=offline;socket.socket.connect_ex=offline;socket.create_connection=offline
     try:
         from rapidocr import RapidOCR
-        from ocr_settings import rapidocr_parameters
+        from scanner.reading.ocr_settings import rapidocr_parameters
         RapidOCR(params=rapidocr_parameters(threads=1))
-        from field_recognizer import FieldReader
+        from scanner.reading.field_recognizer import FieldReader
         FieldReader().load()
     except Exception as error:
         raise SystemExit('Model preparation/check failed: '+str(error))

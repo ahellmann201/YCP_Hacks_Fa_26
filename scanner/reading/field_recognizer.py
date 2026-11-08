@@ -2,7 +2,7 @@
 import importlib.util
 import os
 from pathlib import Path
-from ocr_settings import ocr_threads
+from scanner.reading.ocr_settings import ocr_threads
 
 
 class FieldReader:
@@ -13,7 +13,7 @@ class FieldReader:
         self.last_confidence = None
 
     def load(self):
-        root = Path(__file__).resolve().parent
+        root = Path(__file__).resolve().parents[2]
         helper = root/'tube-training/onnx_recognizer.py'
         spec = importlib.util.spec_from_file_location('tube_field_onnx', helper)
         module = importlib.util.module_from_spec(spec)

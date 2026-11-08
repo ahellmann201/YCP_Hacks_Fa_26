@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from background_scanner import QueueStore
+from scanner.queue.background_scanner import QueueStore
 
 
 class DuplicateTests(unittest.TestCase):

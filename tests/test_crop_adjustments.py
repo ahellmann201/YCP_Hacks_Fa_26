@@ -1,8 +1,8 @@
 import unittest
 import cv2
 import numpy as np
-from crop_adjustments import extend_serial_region, thin_heavy_ink, prefer_thinned_reading
-from sample_dates import extract_written_date, sampled_date_issue
+from scanner.vision.crop_adjustments import extend_serial_region, thin_heavy_ink, prefer_thinned_reading
+from scanner.reading.sample_dates import extract_written_date, sampled_date_issue
 
 
 class AdjustmentTests(unittest.TestCase):

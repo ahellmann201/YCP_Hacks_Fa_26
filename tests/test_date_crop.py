@@ -2,12 +2,12 @@ import unittest
 from unittest.mock import patch
 import cv2
 import numpy as np
-from crop_adjustments import focus_date_ink
+from scanner.vision.crop_adjustments import focus_date_ink
 
 # Import the crop function without letting the worker's process-wide offline
 # hook change networking for the test runner.
 with patch('socket.socket.connect'),patch('socket.socket.connect_ex'),patch('socket.create_connection'):
-    from scanner_auto import prepare_field_crop
+    from scanner.reading.scanner_auto import prepare_field_crop
 
 
 class DateCropTests(unittest.TestCase):

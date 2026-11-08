@@ -86,7 +86,7 @@ def summarize(runs, counts):
 
 def worker(args):
     import resource
-    from label_preview import build_preview
+    from scanner.vision.label_preview import build_preview
     folder = args.tube.resolve()
     sample = json.loads((folder/'sample.json').read_text())
     with tempfile.TemporaryDirectory(prefix='tube-thread-test-') as temporary:
@@ -103,7 +103,7 @@ def worker(args):
                                        'date_received':sample.get('date_received','')}))
         before = time.perf_counter()
         env = dict(os.environ, SCANNER_OCR_THREADS=str(args.threads))
-        process = subprocess.run([sys.executable, str(BASE/'scanner_auto.py'), str(request), str(output)],
+        process = subprocess.run([sys.executable, str(BASE/'scanner'/'reading'/'scanner_auto.py'), str(request), str(output)],
                                  cwd=BASE, env=env, capture_output=True, text=True, timeout=180*len(images)+60)
         if process.returncode:
             raise RuntimeError(process.stderr[-2000:])

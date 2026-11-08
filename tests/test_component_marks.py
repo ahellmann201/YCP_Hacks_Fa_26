@@ -1,7 +1,7 @@
 import unittest
 import cv2
 import numpy as np
-from component_marks import black_circle_crops
+from scanner.vision.component_marks import black_circle_crops
 
 
 class ComponentMarksTests(unittest.TestCase):

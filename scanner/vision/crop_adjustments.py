@@ -46,7 +46,7 @@ def thin_heavy_ink(crop):
 
 
 def prefer_thinned_reading(original,score,candidate,candidate_score,field,received):
-    from sample_dates import sampled_date_issue, extract_written_date
+    from scanner.reading.sample_dates import sampled_date_issue, extract_written_date
     import math
     if not candidate or not all(isinstance(v,(int,float)) and math.isfinite(v) for v in [score,candidate_score]):
         return False
@@ -136,7 +136,7 @@ def refine_field_crop(crop,field,trim_right=False):
 
 def can_fill_empty_from_focus(original,candidate,score,field,received,quality_reasons):
     import math
-    from sample_dates import extract_written_date,sampled_date_issue
+    from scanner.reading.sample_dates import extract_written_date,sampled_date_issue
     if original or not candidate or not isinstance(score,(int,float)) or not math.isfinite(score) or score<.95 or quality_reasons:
         return False
     return field!='date_sampled' or bool(extract_written_date(candidate) and not sampled_date_issue(candidate,received))

@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 import numpy as np
 import cv2
-from background_scanner import QueueStore
-from field_text import strip_heading, visually_empty
-from review_checks import field_checks
+from scanner.queue.background_scanner import QueueStore
+from scanner.reading.field_text import strip_heading, visually_empty
+from scanner.reading.review_checks import field_checks
 
 
 class ResumeFieldTests(unittest.TestCase):

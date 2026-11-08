@@ -7,9 +7,9 @@ from pathlib import Path
 from unittest.mock import patch
 from PIL import Image
 
-from zip_import import prepare_archive, plan_archive, ImportError
-from background_scanner import QueueStore
-from session_store import SessionError
+from scanner.io.zip_import import prepare_archive, plan_archive, ImportError
+from scanner.queue.background_scanner import QueueStore
+from scanner.io.session_store import SessionError
 
 
 def photo():

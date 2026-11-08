@@ -1,8 +1,8 @@
 import unittest
 import cv2
 import numpy as np
-from label_rows import large_row_regions
-from label_alignment import TIGHT_LARGE_FIELDS
+from scanner.vision.label_rows import large_row_regions
+from scanner.vision.label_alignment import TIGHT_LARGE_FIELDS
 
 
 class RowTests(unittest.TestCase):
