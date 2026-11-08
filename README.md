@@ -1,129 +1,184 @@
-# Offline Sample Scanner
+# Three-Tube Sample Scanner
 
-Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. The same server can run from the Dell checkout: [Run on the Dell](#run-on-the-dell). Optional Grok review help is described in [ASSISTANT.md](ASSISTANT.md).
+A motorized sample-label scanner built for the MRG Laboratories challenge: photograph three tubes, save each tube as an independent sample, read its label, review uncertain fields, and export a CSV.
 
-## Quick demo: Pi already running
+We built the system by combining a 3D-printed geared holder, an Arduino UNO Q motor controller, a browser camera interface, local OCR, and an optional **xAI Grok review assistant**. Grok helps the operator resolve difficult label readings; local OCR handles the normal processing path. The integration in this repository is xAI Grok, not a separate SpaceX service.
 
-In the Pi terminal (SSH or VS Code Remote SSH):
+[Windows setup](#set-up-on-a-new-windows-laptop) · [Phone setup](#connect-an-iphone-over-local-https) · [Architecture](#architecture) · [Grok assistant](#how-the-xai-grok-assistant-helps) · [Hardware files](hardware/final%20files/) · [Detailed assistant configuration](ASSISTANT.md)
 
-```bash
-cd ~/sample-scanner
-bash start-scanner.sh
+## What the prototype does
+
+- Accepts browser camera captures, 1–8 uploaded photos of one tube, or a ZIP with one folder per tube.
+- In automatic mode, captures eight stopped views of three tubes and saves **three samples with eight images each**.
+- Decodes barcodes and reads Small/Large label fields with local OCR, preserving evidence for review.
+- Lets an operator correct readings, request optional Grok assistance, confirm samples, and export CSV records.
+- Runs the server on a laptop or a prepared Raspberry Pi. The current USB motor setup was exercised with a Windows laptop and UNO Q.
+
+**Current validation:** the merged version passed 71 Python tests and the JavaScript capture checks. Motor movement and settling were tested, and smooth physical movement was confirmed. A complete iPhone automatic scan still needs a real end-to-end check. Tests do not establish OCR accuracy or guarantee that gears never slip.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    Camera[Browser camera or uploaded photos] --> Web[Browser interface]
+    Web -->|Authenticated local HTTP or trusted HTTPS| API[FastAPI server]
+    API --> Capture[Automatic capture coordinator]
+    Capture -->|USB ADB forwarding: port 8765| Agent[Python motor agent on UNO Q Linux]
+    Agent -->|Arduino Bridge RPC| Firmware[UNO Q automatic motor sketch]
+    Firmware --> Driver[ULN2003 driver]
+    Driver --> Motor[28BYJ-48 motor and printed gear train]
+    Motor --> Tubes[Three tubes rotate together]
+    Firmware -->|Movement complete after settling| Agent
+    Agent --> Capture
+    Capture -->|Ready for next photo| Web
+    Capture -->|Split each view into left, middle, right| Files[Local photo and crop files]
+    API --> Queue[Persistent sample queue]
+    Queue --> OCR[Local barcode decoding and OCR]
+    Files --> OCR
+    OCR --> DB[(SQLite sessions and readings)]
+    DB --> Review[Operator reviews evidence]
+    Review -->|Explicit request| Assistant[Server-side Grok assistant]
+    Assistant -->|Selected context; crop only with consent| XAI[xAI API]
+    XAI -->|Explanation or proposed reading| Review
+    Review -->|Operator confirms| CSV[CSV export]
 ```
 
-Set `SCANNER_ACCESS_PASSWORD` first (see [assistant and authentication setup](ASSISTANT.md)). `start-scanner.sh` stays next to this README. It starts the app with **three OCR threads**. Keep the terminal open. The equivalent direct command is:
+The laptop hosts the website, coordinates capture, and runs OCR. The UNO Q handles motor commands through its Linux-side agent and microcontroller sketch. The phone supplies camera images; it does not connect directly to the motor driver. SQLite stores sessions, queue state, readings, and review records; image files stay in the local `uploads/` directory.
 
-```bash
-SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
-```
+### Automatic capture sequence
 
-1. **Open the page:** use `http://127.0.0.1:8000` on the Pi, or the configured HTTPS reverse-proxy address from a phone/Dell. Log in as `clerk` with `SCANNER_ACCESS_PASSWORD`. The hotspot previously assigned `172.20.10.2`; configured direct Dell Ethernet uses `192.168.50.2`, but these are not direct HTTP login addresses under the new default configuration.
-2. **Choose a session:** the page starts a new session. Uploaded photos are deleted each time the server starts, so download a CSV before stopping if you still need the pictures. Field text already saved in SQLite stays in the database.
-3. **Upload samples:** select 1–8 JPG/PNG/WebP photos of **one tube**, or **one ZIP** containing a folder per tube. For a short demo, use 3–5 clear tubes; use 10–20 for a longer batch. Do not mix ZIPs and loose photos.
-4. **Review as results arrive:** ready cards appear above the processing list. Flagged fields have matching crops; other fields and all originals are expandable. Correct OCR values and select **All good — include in CSV**. Confirmed cards disappear. Populated/high-confidence fields can still be wrong.
-5. **Show the top metrics:** average processing seconds per tube excludes transfer, queue wait and manual review. Field accuracy is **correct fields / applicable fields × 100**, comparing original readings with confirmed corrections, not model confidence. Date Received and unused fields do not count.
-6. **Export:** **Download current CSV** keeps photos for continued work. **Download CSV & finish session** receives the CSV in the browser, starts its download and clears that session's photos/crops. Keep the downloaded file. To intentionally skip review, select **Include unreviewed samples in CSV**. Pending/failed tubes must be resolved before finishing. CSV field records remain in SQLite.
-7. **Stop:** press **Ctrl+C** in the server terminal. Closing the page does not delete photos. Starting the server again empties `uploads/`. To power the Pi off afterwards, run `sudo poweroff` and let shutdown complete before removing power.
+1. The operator fixes the camera in landscape with one complete tube in each third of the image and chooses **Three tubes on the rotating base**.
+2. The browser starts a scan and captures the first view while the tubes are stationary.
+3. For each of seven further views, the server requests a bounded motor movement, waits for completion and the 0.5-second settling pause, then lets the browser capture a fresh frame.
+4. Each full frame is divided into three fixed image regions. After all eight views arrive, the server queues three separate samples for OCR.
+5. The operator reviews barcode identity and label readings, then exports the confirmed records.
 
-ZIP structure:
+The nominal views are 0°, 45°, …, 315°. These are step-count estimates, not measured positions. The gears rotate all three tubes together; separate image groups do not mean independent motor control. Capture uses fixed intervals, not label detection to decide when to stop. The controller watchdog stops movement if status heartbeats disappear. A failed scan is not queued as a completed three-sample batch.
 
-```text
-samples.zip
-└── samples/
-    ├── tube_001/
-    │   ├── front.jpg
-    │   └── rotated.jpg
-    └── tube_002/
-        └── label.jpg
-```
+### How we built it
 
-Limits: **100 tubes per ZIP**, **250 MiB archive**, **512 MiB uncompressed photos**, **8 photos per tube**, **10 MiB and 20 megapixels per photo**. HEIC/HEIF works inside ZIPs when the optional reader is installed. [ZIP guide](docs/BATCH_IMPORT.md) · [Review and cleanup](docs/REVIEW_AND_CLEANUP.md) · [Metrics](docs/SESSION_METRICS.md).
+| Layer | Implementation and purpose |
+|---|---|
+| Mechanical fixture | OpenSCAD models, separate printed gears/washers, cap holders for approximately 17 mm caps, and boltless parts. Print packages target the Bambu P1P with a 0.4 mm nozzle and PLA. |
+| Motion | A 28BYJ-48 motor through a ULN2003 driver; UNO Q firmware provides bounded movement, settling, stop, and heartbeat protection. |
+| Capture | Browser camera preview, three-region framing, manual capture, and an automatic eight-view sequence. |
+| Processing | Python/FastAPI, a persistent queue, OpenCV image processing, ZXing barcode decoding, RapidOCR and local recognizers. |
+| Review | Field crops beside editable values, warnings, optional Grok explanations/readings, human confirmation, and CSV export. |
+| Deployment | A local Python environment, predownloaded models, USB forwarding to UNO Q, and optional trusted local HTTPS for a phone. |
 
-## Run on the Dell
+## How the xAI Grok assistant helps
 
-Use this when the demo should run on the laptop instead of the Pi. It is the same site and the same OCR. The laptop keeps its own `uploads/` folder and `scanner.sqlite3`, so Pi sessions do not appear here, and starting this server does not clear the Pi. On the Pi, run `start-scanner.sh`. On the Dell, after the one-time setup below, set `SCANNER_ACCESS_PASSWORD` in the process environment and double-click `Start Scanner.bat` in this folder. Both launchers stay next to this README. Do not copy this Windows `.venv-ocr` onto the Pi.
+The assistant is an optional second opinion during review. It is off by default and runs outside the OCR worker, so local scanning can continue when cloud assistance is unavailable.
 
-Page behavior matches the Pi demo above: one tube or one ZIP, review, CSV, and **Ctrl+C** to stop. Starting the server empties this checkout’s `uploads/`. Download a CSV first if those photos are still needed. The RTX 3060 is for training. This server reads labels on the CPU.
+| Operator problem | Implemented assistant action | Operator's next step |
+|---|---|---|
+| A field has a warning | Explain the recorded warning and what to inspect | Compare the explanation with the crop and original views |
+| Glare, blur, or curved labels make reading difficult | Give photo advice | Adjust lighting, focus, or angle and capture better evidence |
+| Handwriting is hard to read | With explicit consent, send the selected field crop and request a proposed reading or an unreadable response | Inspect the proposal; use it only if supported by the image |
+| A suggestion needs clarification | Ask a short follow-up question | Resolve uncertainty before confirmation |
 
-**First time only**, in PowerShell, from the checkout. This Dell’s `py -3` is Python 3.14, and the pinned requirements have Windows wheels for it.
+For example, when a date is flagged, Grok can explain the warning. If the digits remain unclear, the operator can explicitly ask it to read that field. **Use suggestion** fills the normal unconfirmed review field; it does not mark the sample correct. Barcode decoding remains authoritative for Sample ID, and assistant Sample ID proposals cannot be applied through the suggestion action.
+
+Grok does not drive the motor, automatically fix hardware, diagnose sample condition, infer machine health, or approve laboratory results. Its role is to help an operator resolve label-reading problems. Faster or more accurate review is an evaluation goal, not a measured result claimed here.
+
+To enable it, set these variables in the same PowerShell session used to launch the server:
 
 ```powershell
-cd C:\Hackathons\YCP_Hack_Fa_26\YCP_Hacks_Fa_26
+$env:ASSISTANT_ENABLED = "true"
+$env:XAI_API_KEY = "YOUR_PRIVATE_XAI_API_KEY"
+# Optional: enable the explicit, consent-based field-image action.
+$env:ASSISTANT_IMAGE_ENABLED = "true"
+```
+
+Keep the key private. Text assistance sends selected field context to xAI; the image action additionally sends the selected crop after confirmation. The server supplies no browsing or code-execution tools to the assistant. Model configuration, request limits, retention, authentication, and evaluation instructions are in [ASSISTANT.md](ASSISTANT.md). A live provider call requires internet and an appropriately configured xAI account; automated tests use mocks.
+
+## Set up on a new Windows laptop
+
+Use the current `main` branch. Install Git, a compatible 64-bit Python, and Arduino App Lab/UNO Q tools if using motor control. Do not copy another computer's virtual environment. The existing motor firmware remains on the same UNO Q when changing laptops.
+
+In PowerShell:
+
+```powershell
+git clone --branch main https://github.com/ahellmann201/YCP_Hacks_Fa_26.git
+cd YCP_Hacks_Fa_26
 py -3 -m venv .venv-ocr
 .\.venv-ocr\Scripts\python.exe -m pip install --upgrade pip
-.\.venv-ocr\Scripts\python.exe -m pip install -r requirements.txt -r requirements-heic.txt
+.\.venv-ocr\Scripts\python.exe -m pip install -r requirements.txt -r requirements-heic.txt cryptography
 .\.venv-ocr\Scripts\python.exe tools\prepare_models.py
 .\.venv-ocr\Scripts\python.exe tools\prepare_models.py --check
 ```
 
-`prepare_models.py` needs internet once so RapidOCR can cache its models. `--check` then confirms those models plus the included English recognizer with networking blocked. The scan itself stays offline after that.
+Installation and initial model preparation need internet. Continue when the offline check reports that the app OCR models loaded successfully. `cryptography` is required by the local HTTPS setup script; HEIC support is optional for JPEG-only uploads.
 
-**Each later start:** double-click `Start Scanner.bat`. Keep that window open. The equivalent command is:
+Start the server:
 
 ```powershell
-cd C:\Hackathons\YCP_Hack_Fa_26\YCP_Hacks_Fa_26
-$env:SCANNER_OCR_THREADS = "3"
-.\.venv-ocr\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
+.\.venv-ocr\Scripts\python.exe scripts\start_automatic_scanner.py
 ```
 
-1. **On the laptop:** open `http://127.0.0.1:8000`. Do not browse to `0.0.0.0`.
-2. **On the phone:** use a configured HTTPS reverse proxy to the laptop's loopback port. The phone must reach that proxy and trust its certificate. **Take photo** uses the phone camera against the HTTPS address that opened the page.
-3. **Stop:** **Ctrl+C** in the PowerShell window. Closing the browser does not delete photos. The next start does.
+Leave the terminal open. On a fresh checkout without HTTPS configuration, open **http://127.0.0.1:8000** on this laptop. The launcher generates a private login file. Display it locally in a second project terminal:
 
-## Cold start: the Pi was powered off
-
-This is a normal restart, **not a reinstall**. Keep the existing environment and model cache.
-
-1. Connect Pi power and Ethernet to the Dell if using Remote SSH. Allow it to boot.
-2. Enable the iPhone's **Personal Hotspot → Allow Others to Join**; **Maximize Compatibility** can help discovery. Keep the hotspot screen open during connection.
-3. On the Dell, reconnect VS Code Remote SSH to `/home/hacks/sample-scanner`, or use:
-
-   ```powershell
-   ssh hacks@192.168.50.2
-   ```
-
-   This address requires the existing direct-Ethernet setup. If it fails, use the Pi's display/keyboard to inspect networking.
-
-4. In the Pi terminal, check addresses and Wi-Fi:
-
-   ```bash
-   nmcli device status
-   hostname -I
-   ```
-
-   If Wi-Fi is disconnected:
-
-   ```bash
-   sudo nmcli device wifi rescan ifname wlan0
-   nmcli -f SSID,SIGNAL device wifi list ifname wlan0
-   sudo nmcli --ask device wifi connect "EXACT HOTSPOT NAME" ifname wlan0
-   hostname -I
-   ```
-
-   Use the exact scanned SSID. It has appeared as `AndrewsiPhone` and previously with an apostrophe. Event Wi-Fi may isolate devices. Internet is needed for installation/updates, not a prepared offline scan.
-
-5. Run `cd ~/sample-scanner`, then `bash start-scanner.sh`. Open the configured HTTPS proxy address on the phone.
-
-### Direct Ethernet recovery
-
-The development link uses **Dell Ethernet `192.168.50.1/24`** and **Pi Ethernet `192.168.50.2/24`**, without a gateway/DNS on that direct link; Wi-Fi provides internet. These are configured addresses, not fresh-install defaults.
-
-Check the Dell's physical Ethernet adapter IPv4 settings. On the Pi's local display, inspect `nmcli connection show`. If the actual Ethernet profile is named `netplan-eth0`, restore the previous configuration with:
-
-```bash
-sudo nmcli connection modify "netplan-eth0" ipv4.method manual ipv4.addresses "192.168.50.2/24" ipv4.never-default yes
-sudo nmcli connection up "netplan-eth0"
+```powershell
+Get-Content .env.automatic-scanner
 ```
 
-Substitute the real profile name if different. Changing it can disconnect SSH, so use the Pi's local terminal for recovery. Then retry SSH from the Dell.
+Use its username/password to sign in. Choose or create a session, upload one tube's photos, and check the OCR results before adding motor or phone setup. GitHub does not contain previous sample photos, session databases, passwords, or private certificates.
 
-## Fresh installation from scratch
+### Connect the existing UNO Q
 
-The demo Pi is a **Pi 3 Model B, 64-bit Debian 13/aarch64, approximately 1 GB RAM**. GPU training is separate and runs on Windows; the Pi needs inference dependencies only.
+Keep the tested motor/driver wiring and power arrangement. Connect the board over USB and confirm App Lab detects it, then run:
 
-**1. Prepare the OS and network.** Boot a 64-bit Pi-compatible OS, create a login, enable SSH if needed and connect to a network reachable from the demo device. A fresh login may differ from `hacks`.
+```powershell
+powershell -ExecutionPolicy Bypass -File hardware\connect_motor_usb.ps1
+```
 
-**2. Install the app with internet available:**
+Expected: **UNO Q connected**, followed by a motor state. Repeat after reconnecting USB. The script expects Arduino's ADB executable at `%LOCALAPPDATA%\Arduino15\packages\arduino\tools\adb\32.0.0\adb.exe`; a different installed tool version requires adjusting that path.
+
+This command only establishes USB forwarding and checks status. It does not install the board-side agent or firmware. For the existing configured board, retain its `uno_q_scan_agent.py` service and `motor_scan/motor_scan.ino` sketch. If the agent is stopped, restore it before retrying. A fresh UNO Q requires separate agent and firmware provisioning; this repository does not yet provide a one-command provisioning script. Uploading `motor_test.ino` replaces automatic control with manual testing.
+
+See [automatic scan notes](hardware/final%20files/AUTOMATIC_SCAN_START_HERE.txt) and [motor source](hardware/final%20files/motor_scan/motor_scan.ino). Ignore old machine-specific IP addresses in historical notes; use the new laptop's address.
+
+## Connect an iPhone over local HTTPS
+
+First verify the laptop-only page. Connect the laptop and phone through the same reachable network; an iPhone hotspot can avoid campus Wi-Fi client isolation. Run `ipconfig` and use the active Wi-Fi adapter's IPv4 address, not an address copied from another computer.
+
+Stop the scanner with Ctrl+C. Replace `YOUR_LAPTOP_IP` with the actual address:
+
+```powershell
+.\.venv-ocr\Scripts\python.exe scripts\setup_local_https.py YOUR_LAPTOP_IP
+New-Item -ItemType Directory -Force tmp\automatic-scanner
+```
+
+Open PowerShell **as Administrator**, change to this project folder, and allow the local ports:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\allow_local_scanner.ps1
+```
+
+In two normal project terminals, leave these running:
+
+```powershell
+# Terminal 1: public certificate installation page
+.\.venv-ocr\Scripts\python.exe scripts\serve_iphone_certificate.py
+```
+
+```powershell
+# Terminal 2: authenticated HTTPS scanner
+.\.venv-ocr\Scripts\python.exe scripts\start_automatic_scanner.py
+```
+
+1. Open `http://YOUR_LAPTOP_IP:8081` in Safari and download the profile.
+2. Open **Settings → General → VPN & Device Management**, select the downloaded profile, and install it.
+3. Enable the scanner certificate under **General → About → Certificate Trust Settings**.
+4. Open `https://YOUR_LAPTOP_IP:8443` and sign in using the new laptop's login.
+5. Choose a session, select three-tube mode, allow camera access, and check the live preview before scanning.
+6. Start with **Original** motor speed. Keep Safari visible and the phone unlocked; verify that three samples with eight views each arrive for review.
+
+A new laptop generates a new certificate authority, so trusting the old laptop's certificate is insufficient. If the laptop IP changes, stop the servers, regenerate its server certificate with the same setup command, rerun the firewall script, and restart both servers. The existing CA is reused when its private configuration remains in place. Do not publish `.env.*` files or private keys.
+
+## Run the local OCR server on a Raspberry Pi
+
+Use a 64-bit Pi OS with compatible inference wheels. The development Pi was a Pi 3 Model B with 64-bit Debian; a new OS/Python combination still needs validation. This sets up OCR/review, not the Windows-specific USB motor connection.
 
 ```bash
 sudo apt update
@@ -133,71 +188,34 @@ cd ~/sample-scanner
 python3 -m venv .venv-ocr
 .venv-ocr/bin/python -m pip install --upgrade pip
 .venv-ocr/bin/python -m pip install -r requirements.txt
-```
-
-For HEIC/HEIF ZIP photos, additionally run:
-
-```bash
-.venv-ocr/bin/python -m pip install -r requirements-heic.txt
-```
-
-Wheels must match the OS/Python architecture. OCR runtime versions reflect this project's tested environment; a different fresh OS is not automatically validated. Do not copy a Windows virtual environment onto the Pi.
-
-**3. Prepare models once in the same environment as the server:**
-
-```bash
 .venv-ocr/bin/python tools/prepare_models.py
 .venv-ocr/bin/python tools/prepare_models.py --check
-```
-
-The first command can download the selected RapidOCR PP-OCRv5 mobile models. The second blocks networking and checks those cached models plus the included English candidate. The app worker blocks network access and cannot download missing models while scanning. Included recognizers are under `trained-model/`.
-
-**4. Check and launch:**
-
-```bash
-.venv-ocr/bin/python -m py_compile main.py scanner/reading/scanner_auto.py scanner/queue/background_scanner.py
+export SCANNER_ACCESS_PASSWORD='REPLACE_WITH_A_LONG_RANDOM_PASSWORD'
 bash start-scanner.sh
 ```
 
-Before presenting, upload one Small and one Large label, inspect crops/originals, correct fields and open the CSV. Test HEIC import on the actual Pi if your ZIP uses it. Syntax/model loading checks do not prove recognition accuracy.
+The server binds to loopback by default. Use it locally at `http://127.0.0.1:8000`, or configure trusted HTTPS for remote devices as described in [ASSISTANT.md](ASSISTANT.md). Keep one server worker. GPU training is a separate environment documented in [tube-training/README.md](tube-training/README.md).
 
-## Updating an existing checkout
+## Review, export, and update
 
-Current updates are in **`main`**. Older Pi checkouts may still be on `training` or `Andrew`.
+Review crops and originals, correct fields, and select **All good — include in CSV**. **Download current CSV** leaves the session available. **Download CSV & finish session** downloads the CSV and clears that session's photos/crops. Closing the browser does not finish a session.
 
-```bash
-cd ~/sample-scanner
-git status
-git branch --show-current
-git fetch origin
-```
+**Starting the server empties its local `uploads/` directory.** Saved field records remain in SQLite, but export required work and back up matching database/photos before restarting or updating. A Git push is not a sample-data backup.
 
-For a **clean checkout already on `main`**, stop the server, run `git pull --ff-only`, then `bash start-scanner.sh`. If there are local edits or individually restored files, save/commit those before switching branches or pulling. Do not hard-reset or delete `uploads/`/`scanner.sqlite3` as an update step. Pushing source code does not back up sample data.
+For a clean checkout already on `main`, stop the server and run `git pull --ff-only`, then restart. If local changes exist, preserve them before updating; do not hard-reset to resolve them.
 
-To synchronize an older mixed Pi checkout in place, stop its server and follow [the backed-up Pi sync procedure](docs/PI_CLEAN_CHECKOUT.md#sync-the-current-pi-folder-in-place). This aligns source to `origin/training`; it does not replay old application changes with a Git rebase.
-
-If VS Code still shows the old root files and many `M`/`A`/`U` markers, use the [clean Pi checkout guide](docs/PI_CLEAN_CHECKOUT.md). It creates `~/sample-scanner-demo` on `training` and links the existing environment and data, preserving the old working tree. Use that folder instead in the demo commands.
-
-## Demo troubleshooting
-
-| Symptom | Action |
+| Problem | First check |
 |---|---|
-| Phone cannot open the page | Keep the server and HTTPS proxy running. Check the proxy address, certificate, allowed origin, and hotspot connectivity. |
-| SSH times out | Check Ethernet link and the `.50.1`/`.50.2` adapter settings above; use the Pi display for recovery. |
-| GitHub hostname cannot resolve | Reconnect Pi Wi-Fi/default route or DNS. Prepared OCR does not need GitHub. |
-| Old controls remain | Refresh/reopen the page after HTML updates. Restart after Python updates. |
-| Missing model / OCR worker stops | Run `tools/prepare_models.py --check`; prepare online if needed. Check memory with `free -h`. |
-| Wrong crops or text | Check the crop and all originals. Updated crop code needs new processing; it does not regenerate old crops. |
-| HEIC import fails | Install `requirements-heic.txt`, restart and retry. Validation failures queue none of the batch. |
-| Photos gone after a restart | Startup empties `uploads/`. Download the CSV before stopping the server if those photos are still needed. |
+| Phone page times out | Same reachable network, correct current IP, running servers, firewall ports 8081/8443 |
+| Certificate missing from trust settings | Install the downloaded profile first; downloading alone does not install it |
+| No live camera picture | Trusted HTTPS, browser permission, visible camera controls, and selected camera; test laptop capture separately |
+| UNO Q offline | USB data cable, App Lab connection, installed ADB tools, then rerun the USB connection script |
+| Motor status fails despite USB connection | Automatic firmware and the board-side agent must both be running |
+| Missing OCR models | Prepare online, then rerun `tools/prepare_models.py --check` |
+| Grok unavailable | Server environment/key, enabled flags, internet, account limits; local OCR remains usable |
+| Wrong reading or crop | Inspect originals, capture a better view, and correct the field; AI agreement is not proof |
 
-Local page check from a second Pi terminal:
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/
-```
-
-Expected: `200`. `curl -I` sends HEAD and may return `405` even when the page works.
+More detail: [batch ZIP intake](docs/BATCH_IMPORT.md), [review and cleanup](docs/REVIEW_AND_CLEANUP.md), [session metrics](docs/SESSION_METRICS.md).
 
 ## Performance and limits
 
@@ -227,6 +245,10 @@ For optional Grok review help, authentication, privacy, and Pi deployment, see [
 |---|---|
 | `README.md`, `start-scanner.sh`, `Start Scanner.bat` | This guide and the two launchers. They stay in the project root. |
 | `main.py`, `static/` | FastAPI entry point, MRG logo, and phone/browser interface |
+| `automatic_capture.py` | Motor-coordinated capture and separate sample assembly |
+| `hardware/final files/` | Print packages, motor firmware, board-side agent and assembly notes |
+| `scripts/` | Startup, local HTTPS and network setup helpers |
+| `grok_assistant.py`, `ASSISTANT.md` | Optional xAI review integration and configuration |
 | `scanner/queue/` | Background scan queue |
 | `scanner/io/` | Sessions, upload cleanup, and ZIP intake |
 | `scanner/vision/` | Label alignment, crops, and circled component marks |
@@ -240,10 +262,12 @@ For optional Grok review help, authentication, privacy, and Pi deployment, see [
 | `legacy/` | Earlier unused OCR worker |
 | `uploads/`, `scanner.sqlite3` | Local photo/crop files and session/field records; ignored by Git. `uploads/` is emptied when the server starts. |
 
-Run from the repository root:
+Run from the repository root with the inference dependencies installed. The following uses Linux virtual-environment paths; on Windows use `.\.venv-ocr\Scripts\python.exe`. The capture check requires Node.js.
 
 ```bash
-.venv-ocr/bin/python -m unittest discover -s tests -p 'test_*.py'
+.venv-ocr/bin/python -m pip install pytest
+.venv-ocr/bin/python -m pytest tests -q
+node tests/check_three_tube_capture.cjs
 .venv-ocr/bin/python tools/benchmark_threads.py --samples 10 --thread-counts 3 --repeats 2
 .venv-ocr/bin/python tools/test_barcode.py "PATH/TO/PHOTO.jpg"
 .venv-ocr/bin/python tools/test_handwriting.py "PATH/TO/PHOTO.jpg"
