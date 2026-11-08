@@ -252,6 +252,19 @@ function addCard(job) {
         ? `Sample ${review.fields.sample_id}` : "Sample needs review";
     c.el.append(title);
 
+    const timing=job.timing;
+    if(timing && Number.isFinite(timing.processing_seconds)) {
+        const elapsed=document.createElement("p");
+        elapsed.className="muted";
+        elapsed.textContent=`Processed in ${timing.processing_seconds.toFixed(1)} seconds`;
+        if(Number.isFinite(timing.total_seconds)) {
+            elapsed.textContent+=` · Queue ${timing.queue_seconds.toFixed(1)}s · Ready ${timing.total_seconds.toFixed(1)}s after upload`;
+            elapsed.textContent+=timing.total_seconds<=30?" · Within 30s target":" · Over 30s target";
+        }
+        elapsed.title="Starts after the server accepts the uploaded photos. Includes all photos, OCR and preview generation; excludes photo capture, upload transfer, manual review and browser refresh delay.";
+        c.el.append(elapsed);
+    }
+
     if(review.evidence) {
         const link=document.createElement("a");
         link.href=`/samples/${c.id}/evidence`;

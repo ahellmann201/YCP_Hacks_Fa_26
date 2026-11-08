@@ -24,27 +24,31 @@ class QueueStore(SessionStore):
                     notices_json TEXT NOT NULL DEFAULT '[]'
                 )
             """)
+            columns = {row['name'] for row in db.execute('PRAGMA table_info(scan_jobs)')}
+            for name, kind in [('queued_at', 'REAL'), ('timing_json', 'TEXT')]:
+                if name not in columns:
+                    db.execute(f'ALTER TABLE scan_jobs ADD COLUMN {name} {kind}')
 
     def register(self, session_id, record_id):
         with self.connection(write=True) as db:
             self._active(db, session_id)
             self._attach(db, session_id, record_id)
             db.execute("""
-                INSERT OR IGNORE INTO scan_jobs(record_id, state)
-                VALUES (?, 'queued')
-            """, (record_id,))
+                INSERT OR IGNORE INTO scan_jobs(record_id, state, queued_at)
+                VALUES (?, 'queued', ?)
+            """, (record_id, time.time()))
 
     def recover(self):
         with self.connection(write=True) as db:
             db.execute("""
-                UPDATE scan_jobs SET state='queued'
+                UPDATE scan_jobs SET state='queued', queued_at=NULL, timing_json=NULL
                 WHERE state='processing'
             """)
 
     def claim(self):
         with self.connection(write=True) as db:
             row = db.execute("""
-                SELECT j.record_id, s.session_id
+                SELECT j.record_id, s.session_id, j.queued_at
                 FROM scan_jobs j JOIN session_samples s USING(record_id)
                 WHERE j.state='queued'
                 ORDER BY s.sequence LIMIT 1
@@ -55,18 +59,25 @@ class QueueStore(SessionStore):
                 UPDATE scan_jobs SET state='processing', error=NULL
                 WHERE record_id=?
             """, (row["record_id"],))
-            return dict(row)
+            job = dict(row)
+            job['queue_seconds'] = max(0, time.time()-row['queued_at']) if row['queued_at'] is not None else None
+            return job
 
-    def complete(self, job, review, notices):
+    def complete(self, job, review, notices, processing_seconds=None):
+        timing = None
+        if processing_seconds is not None:
+            waiting = job.get('queue_seconds')
+            timing = {'processing_seconds': processing_seconds, 'queue_seconds': waiting,
+                      'total_seconds': waiting+processing_seconds if waiting is not None else None}
         with self.connection(write=True) as db:
             db.execute("""
                 UPDATE session_samples SET review_json=?
                 WHERE record_id=? AND session_id=?
             """, (json.dumps(review), job["record_id"], job["session_id"]))
             db.execute("""
-                UPDATE scan_jobs SET state='done', error=NULL, notices_json=?
+                UPDATE scan_jobs SET state='done', error=NULL, notices_json=?, timing_json=?
                 WHERE record_id=?
-            """, (json.dumps(notices), job["record_id"]))
+            """, (json.dumps(notices), json.dumps(timing), job["record_id"]))
 
     def fail(self, record_id, error):
         with self.connection(write=True) as db:
@@ -87,9 +98,9 @@ class QueueStore(SessionStore):
                 raise SessionError("Queued sample not found.")
             if row["state"] == "error":
                 db.execute("""
-                    UPDATE scan_jobs SET state='queued', error=NULL
+                    UPDATE scan_jobs SET state='queued', error=NULL, queued_at=?, timing_json=NULL
                     WHERE record_id=?
-                """, (record_id,))
+                """, (time.time(), record_id))
 
     def status(self, session_id):
         with self.connection() as db:
@@ -102,7 +113,7 @@ class QueueStore(SessionStore):
             result["counts"] = {row["state"]: row["total"] for row in counts}
             rows = db.execute("""
                 SELECT s.record_id, s.sequence, s.review_json,
-                       j.state, j.error, j.notices_json
+                       j.state, j.error, j.notices_json, j.timing_json
                 FROM session_samples s JOIN scan_jobs j USING(record_id)
                 WHERE s.session_id=? ORDER BY s.sequence
             """, (session_id,)).fetchall()
@@ -120,6 +131,7 @@ class QueueStore(SessionStore):
                     "sample_id": review.get("fields", {}).get("sample_id", ""),
                     "state": row["state"], "error": row["error"],
                     "notices": json.loads(row["notices_json"]),
+                    "timing": json.loads(row['timing_json']) if row['timing_json'] else None,
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
@@ -231,6 +243,7 @@ class ScannerQueue:
             temporary.unlink(missing_ok=True)
 
     def process(self, job):
+        processing_started = time.perf_counter()
         record_id = job["record_id"]
         if not re.fullmatch(r"[0-9a-f]{32}", record_id):
             raise RuntimeError("Invalid record ID.")
@@ -304,7 +317,8 @@ class ScannerQueue:
             review["evidence"] = None
 
         result.update(record_id=record_id, run_id=run_id)
-        self.store.complete(job, review, notices)
+        self.store.complete(job, review, notices,
+                            processing_seconds=time.perf_counter()-processing_started)
         try:
             self.snapshot(folder / "ocr.json", result)
             self.snapshot(folder / "review.json", review)
