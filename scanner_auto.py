@@ -626,6 +626,12 @@ def process(job):
                 if entry.get('alignment_method') == 'tight_large_label':
                     from label_alignment import TIGHT_LARGE_FIELDS
                     template = {**template, 'fields':TIGHT_LARGE_FIELDS}
+                if label_type == 'large':
+                    from label_rows import large_row_regions
+                    detected_rows = large_row_regions(aligned,template)
+                    if detected_rows:
+                        template = {**template, 'fields':detected_rows['regions']}
+                        entry['row_baselines'] = detected_rows['baselines']
 
                 for field, region in template["fields"].items():
                     crop = prepare_field_crop(
