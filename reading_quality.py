@@ -1,4 +1,4 @@
-"""Abstain on uncertain handwriting; never guess corrections or call smears blank."""
+"""Autofill OCR readings with review hints; never guess corrections or call smears blank."""
 from datetime import date
 import math
 import re
@@ -39,9 +39,9 @@ def guard_readings(fields, kind, result, received):
         scores=[image.get('field_scores',{}).get(field) for image in readings]
         reasons=[]
         if not scores or any(not isinstance(score,(int,float)) or not math.isfinite(score) for score in scores):
-            reasons.append('OCR certainty is unavailable; verify the suggestion against the crop.')
+            reasons.append('OCR certainty is unavailable; verify this reading against the crop.')
         elif min(scores)<.95:
-            reasons.append('Uncertain handwriting — verify the suggestion against the crop.')
+            reasons.append('Uncertain handwriting — verify this reading against the crop.')
         for image in readings:
             for reason in image.get('field_quality',{}).get(field,[]):
                 if reason not in reasons:
@@ -59,7 +59,6 @@ def guard_readings(fields, kind, result, received):
         if reasons:
             candidates[field]=[str(value)]
             withheld[field]=reasons
-            accepted[field]=''
     for field,values in result.get('alternatives',{}).items():
         if not accepted.get(field) and values:
             candidates[field]=list(dict.fromkeys(str(value) for value in values))

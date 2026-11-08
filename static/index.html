@@ -188,7 +188,8 @@ function fieldStates(c) {
         }
         c.inputs[key].classList.toggle("bad",!!error);
         c.inputs[key].setAttribute("aria-invalid",error?"true":"false");
-        c.hints[key].textContent=error || (c.checkReasons?.[key]||[]).join(" ") ||
+        c.hints[key].textContent=error || (c.checkReasons?.[key]||[])
+            .filter(reason=>!fields[key] || !reason.startsWith("Missing reading")).join(" ") ||
             ((c.blankFields||[]).includes(key) && !fields[key]?"Detected blank — available here if you need to correct it.":"");
         if(error && c.otherFields?.contains(c.inputs[key])) c.moreDetails.open=true;
     });
@@ -406,9 +407,9 @@ function addCard(job) {
         c.inputs[key]=input; c.hints[key]=hint;
         wrap.append(input,hint);
         const candidates=review.ocr_candidates?.[key]||[];
-        if(candidates.length) {
+        if(candidates.length>1) {
             const suggestion=document.createElement("p"); suggestion.className="muted";
-            suggestion.textContent="Unverified OCR suggestion: "+candidates.join(" / ");
+            suggestion.textContent="Conflicting OCR readings: "+candidates.join(" / ");
             wrap.append(suggestion);
         }
         row.append(wrap);
@@ -450,6 +451,19 @@ function addCard(job) {
         attention.append(note);
     }
     c.el.append(c.moreDetails,originals);
+    if(Object.entries(review.ocr_candidates||{}).some(([key,choices])=>
+        c.inputs[key] && !c.inputs[key].value && choices.length===1)) {
+        const restore=document.createElement("button");
+        restore.type="button"; restore.textContent="Fill empty boxes from OCR";
+        restore.onclick=()=>{
+            Object.entries(review.ocr_candidates||{}).forEach(([key,choices])=>{
+                if(c.inputs[key] && !c.inputs[key].value && choices.length===1)
+                    c.inputs[key].value=key==="serial_number"?choices[0].toUpperCase():choices[0];
+            });
+            edited(c); restore.hidden=true;
+        };
+        c.el.append(restore);
+    }
 
     const label=document.createElement("label");
     label.className="confirm";

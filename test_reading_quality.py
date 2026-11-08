@@ -10,7 +10,7 @@ from background_scanner import QueueStore, ScannerQueue
 
 
 class QualityTests(unittest.TestCase):
-    def test_worker_keeps_raw_snapshot_for_accuracy_while_withholding_input(self):
+    def test_worker_autofills_and_keeps_raw_snapshot_for_accuracy(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);record='a'*32;folder=root/'uploads'/record;folder.mkdir(parents=True)
             store=QueueStore(root/'scanner.sqlite3');sid=store.create('quality')['id']
@@ -25,7 +25,7 @@ class QualityTests(unittest.TestCase):
             with patch.object(queue,'child',side_effect=child):
                 queue.process(store.claim())
             review=store.sample(record)['review']
-            self.assertEqual(review['fields']['machine'],'')
+            self.assertEqual(review['fields']['machine'],'2')
             self.assertEqual(review['ocr_candidates']['machine'],['2'])
             self.assertEqual(review['original_fields']['machine'],'2')
             corrected=dict(review['fields'],machine='27')
@@ -35,10 +35,10 @@ class QualityTests(unittest.TestCase):
     def result(self, fields, score):
         return {'images':[{'fields':fields,'field_scores':{key:score for key in fields}}]}
 
-    def test_uncertain_handwriting_is_a_candidate_not_a_saved_guess(self):
+    def test_uncertain_handwriting_autofills_with_review_hints(self):
         fields={'machine':'2','component':'Rea Mnbr'}
         accepted,candidates,reasons=guard_readings(fields,'large',self.result(fields,.8),'2026-11-07')
-        self.assertEqual(accepted,{'machine':'','component':''})
+        self.assertEqual(accepted,fields)
         self.assertEqual(candidates['machine'],['2'])
         self.assertEqual(candidates['component'],['Rea Mnbr'])
         self.assertTrue(reasons['machine'])
@@ -47,7 +47,7 @@ class QualityTests(unittest.TestCase):
     def test_future_date_is_flagged_without_inventing_correct_year(self):
         fields={'date_sampled':'4.13.34'}
         accepted,candidates,reasons=guard_readings(fields,'large',self.result(fields,.99),'2026-11-07')
-        self.assertEqual(accepted['date_sampled'],'')
+        self.assertEqual(accepted['date_sampled'],'4.13.34')
         self.assertEqual(candidates['date_sampled'],['4.13.34'])
         self.assertIn('Date Received',reasons['date_sampled'][0])
 
@@ -65,7 +65,7 @@ class QualityTests(unittest.TestCase):
         fields={'machine':'AB'};result=self.result(fields,.99)
         result['images'][0]['field_quality']={'machine':reasons}
         accepted,candidates,_=guard_readings(fields,'large',result,'2026-11-07')
-        self.assertEqual(accepted['machine'],'')
+        self.assertEqual(accepted['machine'],'AB')
         self.assertEqual(candidates['machine'],['AB'])
         self.assertNotIn('blank_fields',result)
 
