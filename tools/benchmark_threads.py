@@ -10,7 +10,8 @@ import sys
 import tempfile
 import time
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parent.parent
+sys.path.insert(0,str(BASE))
 
 
 def select_tubes(base, count):

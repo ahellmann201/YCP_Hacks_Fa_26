@@ -141,7 +141,15 @@ function remember() {
     } catch (_) {}
 }
 function dateText(value) {
-    return String(value || "").trim();
+    const raw=String(value || "").trim();
+    const full=raw.match(/^(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{2}|\d{4})$/);
+    if(full) {
+        const year=full[3].length===2?2000+Number(full[3]):Number(full[3]);
+        const formatted=`${full[1].padStart(2,"0")}/${full[2].padStart(2,"0")}/${String(year).padStart(4,"0")}`;
+        return validDate(formatted)?formatted:raw;
+    }
+    const partial=raw.match(/^(\d{1,2})\s*[/.-]\s*(\d{1,4})$/);
+    return partial?`${partial[1]}/${partial[2]}`:raw;
 }
 
 function validDate(value) {

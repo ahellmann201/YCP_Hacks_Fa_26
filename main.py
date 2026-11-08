@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from background_scanner import QueueStore, ScannerQueue
 from session_store import SessionError
 from zip_import import prepare_archive, ImportError as BatchImportError
+from sample_dates import normalize_sample_date
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
@@ -238,6 +239,7 @@ def edit_review(record_id: str, request: Review):
         for key, value in request.fields.model_dump().items()
     }
     fields["serial_number"] = fields["serial_number"].upper()
+    fields['date_sampled'] = normalize_sample_date(fields['date_sampled'])
     if request.label_type == "small":
         fields["reference_lube"] = ""
         fields["component"] = fields["component"].upper()

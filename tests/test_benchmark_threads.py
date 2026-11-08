@@ -2,7 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from benchmark_threads import select_tubes, summarize
+from tools.benchmark_threads import select_tubes, summarize
 
 
 class BenchmarkTests(unittest.TestCase):

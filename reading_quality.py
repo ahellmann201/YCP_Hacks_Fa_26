@@ -2,6 +2,7 @@
 from datetime import date
 import math
 import re
+from sample_dates import same_sample_date
 
 
 def crop_quality(crop):
@@ -35,7 +36,8 @@ def guard_readings(fields, kind, result, received):
                 withheld[field]=reasons
             continue
         readings=[image for image in result.get('images',[]) if
-                  str(image.get('fields',{}).get(field) or '').strip().casefold()==str(value).strip().casefold()]
+                  (same_sample_date(image.get('fields',{}).get(field),value) if field=='date_sampled' else
+                   str(image.get('fields',{}).get(field) or '').strip().casefold()==str(value).strip().casefold())]
         scores=[image.get('field_scores',{}).get(field) for image in readings]
         reasons=[]
         if not scores or any(not isinstance(score,(int,float)) or not math.isfinite(score) for score in scores):

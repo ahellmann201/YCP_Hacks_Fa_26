@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 from session_store import SessionStore, SessionError
+from sample_dates import normalize_sample_date, same_sample_date
 
 class QueueStore(SessionStore):
     def unfinished(self):
@@ -174,7 +175,7 @@ class QueueStore(SessionStore):
                         after = str(approved.get(key) or '').strip()
                         if key == 'serial_number':
                             before, after = before.upper(), after.upper()
-                        correct_fields += int(before == after)
+                        correct_fields += int(same_sample_date(before,after) if key=='date_sampled' else before==after)
                         total_fields += 1
                     scored_tubes += 1
                 result["confirmed_count"] += int(confirmed)
@@ -230,8 +231,7 @@ class QueueStore(SessionStore):
             return review
 
 def normalized_date(value):
-    # Preserve the written date without guessing its meaning or year.
-    return str(value or "").strip()
+    return normalize_sample_date(value)
 
 
 class ScannerQueue:

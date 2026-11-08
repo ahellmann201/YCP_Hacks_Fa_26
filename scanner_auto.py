@@ -5,7 +5,7 @@ import socket
 import sys
 from datetime import datetime
 from pathlib import Path
-from ocr_settings import ocr_threads
+from ocr_settings import ocr_threads, rapidocr_parameters
 from field_text import strip_heading, visually_empty
 from reading_quality import crop_quality
 
@@ -463,27 +463,11 @@ def process(job):
     import numpy as np
 
     from PIL import Image, ImageOps
-    from rapidocr import RapidOCR, ModelType, OCRVersion
+    from rapidocr import RapidOCR
 
     cv2.setNumThreads(1)
 
-    engine = RapidOCR(params={
-        "Det.ocr_version": OCRVersion.PPOCRV5,
-        "Det.model_type": ModelType.MOBILE,
-
-        "Rec.ocr_version": OCRVersion.PPOCRV5,
-        "Rec.model_type": ModelType.MOBILE,
-
-        "Det.limit_side_len": 640,
-        "Det.limit_type": "max",
-
-        "Rec.rec_batch_num": 1,
-        "Cls.cls_batch_num": 1,
-
-        "EngineConfig.onnxruntime.intra_op_num_threads": ocr_threads(),
-        "EngineConfig.onnxruntime.inter_op_num_threads": 1,
-        "EngineConfig.onnxruntime.enable_cpu_mem_arena": False,
-    })
+    engine = RapidOCR(params=rapidocr_parameters())
 
     output_dir = Path(job["debug_dir"])
     output_dir.mkdir(
