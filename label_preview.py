@@ -63,6 +63,8 @@ def build_preview(folder, run_id, result, kind):
                         height = image.height
                         if field == "component":
                             region = (60, int(height*.80), 1160, height)
+                        elif entry.get('barcode_box'):
+                            region = tuple(entry['barcode_box'])
                         elif kind == "small":
                             region = (216, int(height*.02), 948, int(height*.25))
                         else:

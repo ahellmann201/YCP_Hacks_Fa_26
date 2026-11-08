@@ -31,6 +31,10 @@ def field_checks(fields, kind, result):
             elif min(scores) < .95:
                 reasons.append('OCR confidence is below the review threshold.')
         for image in result.get('images', []):
+            if kind == 'large' and key != 'sample_id' and image.get('alignment_method') == 'barcode':
+                reason = 'Barcode-only alignment — verify that the crop contains the complete field.'
+                if reason not in reasons:
+                    reasons.append(reason)
             for warning in image.get('warnings', []):
                 if warning.startswith(key+':') and warning not in reasons:
                     reasons.append(warning)

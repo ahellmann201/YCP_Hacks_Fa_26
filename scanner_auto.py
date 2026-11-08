@@ -43,6 +43,7 @@ TEMPLATES = {
         },
     },
     "large": {
+        "layout": "large",
         "size": (1200, 330),
         "barcode": (0.47, 0.65, 0.85, 0.91),
         "fields": {
@@ -178,7 +179,7 @@ def raw_values(text, label_type):
     return values
 
 
-def align_to_template(image, barcode, template):
+def align_to_template(image, barcode, template, metadata=None):
     import cv2
     import numpy as np
 
@@ -213,6 +214,19 @@ def align_to_template(image, barcode, template):
         source,
         destination,
     )
+    method = 'barcode'
+    if template.get('layout') == 'large':
+        from label_alignment import tight_large_transform
+        framed = tight_large_transform(image, barcode, template)
+        if framed is not None:
+            transform = framed
+            method = 'tight_large_label'
+    if metadata is not None:
+        metadata['alignment_method'] = method
+        corners = cv2.perspectiveTransform(source.reshape(1,4,2),transform)[0]
+        x1,y1 = corners.min(axis=0); x2,y2 = corners.max(axis=0)
+        metadata['barcode_box'] = [max(0,int(x1)-6),max(0,int(y1)-6),
+                                   min(canvas_width,int(x2)+7),min(height,int(y2)+7)]
 
     aligned = cv2.warpPerspective(
         image,
@@ -592,6 +606,7 @@ def process(job):
                     pixels,
                     decoded[0],
                     template,
+                    metadata=entry,
                 )
 
                 aligned_name = (
@@ -606,6 +621,10 @@ def process(job):
                 entry["debug"].append(
                     aligned_name
                 )
+
+                if entry.get('alignment_method') == 'tight_large_label':
+                    from label_alignment import TIGHT_LARGE_FIELDS
+                    template = {**template, 'fields':TIGHT_LARGE_FIELDS}
 
                 for field, region in template["fields"].items():
                     crop = prepare_field_crop(
