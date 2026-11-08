@@ -1,0 +1,54 @@
+IPHONE THREE-TUBE CAPTURE AND MOTOR SPEED
+
+The scanner website now has Capture setup > Three tubes on the rotating base.
+This is a manual stop-and-capture workflow. The website does not yet send
+commands to the UNO Q or automatically trigger a phone photo after motor DONE.
+
+1. Open the updated scanner website on the iPhone and choose three-tube mode.
+2. Fix the phone in landscape, camera at label height. Use diffuse lighting.
+   Fit each complete tube and its label within its own third of the image.
+   Keep phone position, zoom, tube positions and orientation unchanged.
+3. Use Start camera over trusted HTTPS, or Take photo with iPhone. Live capture
+   requests the rear camera and high resolution; actual resolution varies by
+   device/browser. Landscape native camera photos can be sharper than a stream.
+4. Capture a first view while stationary. Check the three cropped previews:
+   each must contain exactly one tube's label, in focus, without clipped text.
+5. Send n in the UNO Q Monitor, wait for DONE, then take the next photo.
+   n advances approximately 45 degrees at each tube. Repeat seven times for
+   eight views total, covering one revolution. A final n returns near the
+   starting orientation if desired, without taking a ninth photo.
+6. Upload tubes as separate samples. Left, middle and right images are grouped
+   separately, up to eight views each. Keep tube positions fixed until done.
+   If an upload fails, remaining photos are kept and new capture is blocked.
+   Check the session before retrying if the connection failed after sending:
+   the server may have accepted a request whose response never reached the phone.
+7. Review the decoded labels in the existing scanner and confirm each sample.
+   Left/middle/right are physical positions, not verified sample identities.
+
+MOTOR SKETCH
+Open motor_test/motor_test.ino and upload it to the UNO Q using your existing
+working Arduino setup. This file has been host-simulation tested, not compiled
+against the installed UNO Q core or uploaded to the physical board here.
+Select speed only while idle:
+1 = original 4 ms step interval (still the startup default)
+2 = moderate 3 ms step interval; test this first
+3 = fast 2 ms step interval; experimental under the actual load
+n = next 45-degree tube view
+j = short motor jog; m = motor turn; t = complete tube turn
+s = stop and release; r = reverse the next motion; ? = help
+
+1 - original: about 33.8 seconds per complete tube revolution, including the 0.5-second settling pause.
+2 - moderate: about 25.7 seconds per complete tube revolution, including the 0.5-second settling pause.
+3 - fast test: about 17.7 seconds per complete tube revolution, including the 0.5-second settling pause.
+These are calculated timing estimates, not measured hardware performance.
+Eight separate views include repeated acceleration and settling, so a scan
+will take longer than one continuous revolution, plus photo/upload time.
+Keep the motor at its rated 5 V. Verify ULN2003 driver and supply before wiring.
+Try higher speeds unloaded, then with empty tubes. If it clicks, stalls or
+fails to return to a reference mark, return to a slower preset. Open-loop step
+counts cannot detect slipping. Do not assume a faster command achieved its angle.
+
+The faster presets do not require changing or reprinting gears.
+The three tubes still rotate together; independent image records do not mean
+independent mechanical rotation. End-to-end iPhone capture and loaded motor
+performance still need a physical test.

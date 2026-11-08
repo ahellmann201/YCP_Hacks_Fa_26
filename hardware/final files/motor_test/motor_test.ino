@@ -14,6 +14,7 @@ const uint32_t MOTOR_HALF_STEPS_PER_TURN = 4096;
 const uint32_t TUBE_HALF_STEPS_PER_TURN = 2 * MOTOR_HALF_STEPS_PER_TURN;
 const uint32_t START_INTERVAL_US = 8000;
 const uint32_t RUN_INTERVAL_US = 4000;
+uint32_t runIntervalUs = RUN_INTERVAL_US; // 1=original, 2=moderate, 3=fast test
 const uint32_t RAMP_STEPS = 128;
 const uint32_t SETTLE_MS = 500;
 
@@ -42,6 +43,8 @@ void printHelp() {
   Monitor.println("m = approximately one MOTOR shaft revolution");
   Monitor.println("t = approximately one TUBE revolution (two motor turns)");
   Monitor.println("r = reverse next movement; s = STOP and release; ? = help");
+  Monitor.println("1 = original speed; 2 = moderate; 3 = fast TEST (select while idle)");
+  Monitor.println("n = next 45-degree tube view; wait for DONE before taking a photo");
   Monitor.println("Test with NO gears/tubes first. Angles are open-loop estimates.");
 }
 
@@ -58,6 +61,16 @@ void startMove(uint32_t steps) {
 
 void handleCommand(char command) {
   switch (command) {
+    case '1': case '2': case '3':
+      if (remainingSteps || settling) Monitor.println("BUSY: stop or wait before changing speed.");
+      else {
+        runIntervalUs = command=='1' ? 4000 : command=='2' ? 3000 : 2000;
+        Monitor.println(command=='1' ? "Original speed selected." :
+                        command=='2' ? "Moderate speed selected; check for stalls." :
+                                       "Fast TEST selected; revert if slipping or stalling.");
+      }
+      break;
+    case 'n': case 'N': startMove(TUBE_HALF_STEPS_PER_TURN / 8); break;
     case 'j': case 'J': startMove(512); break;
     case 'm': case 'M': startMove(MOTOR_HALF_STEPS_PER_TURN); break;
     case 't': case 'T': startMove(TUBE_HALF_STEPS_PER_TURN); break;
@@ -76,7 +89,7 @@ uint32_t stepIntervalUs() {
   uint32_t ramp = completedSteps;
   if (remainingSteps < ramp) ramp = remainingSteps;
   if (ramp > RAMP_STEPS) ramp = RAMP_STEPS;
-  return START_INTERVAL_US - (START_INTERVAL_US-RUN_INTERVAL_US)*ramp/RAMP_STEPS;
+  return START_INTERVAL_US - (START_INTERVAL_US-runIntervalUs)*ramp/RAMP_STEPS;
 }
 
 void updateMotor() {

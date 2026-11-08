@@ -1,3 +1,6 @@
+UPDATE: speed commands 1/2/3 and next-view command n are now available.
+Read IPHONE_CAPTURE_AND_SPEED.txt first. Default startup speed is unchanged.
+
 FIRST MOTOR TEST - PROVISIONAL UNO Q / ULN2003 WIRING
 
 The project notes identify Arduino UNO Q, and the motor is confirmed as

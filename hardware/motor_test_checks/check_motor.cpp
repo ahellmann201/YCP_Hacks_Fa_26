@@ -46,6 +46,20 @@ int main() {
   while(remainingSteps) { advance(8000); checkPhase(); }
   assert(completedSteps==8192 && settling);
   send('s'); assert(!settling && allOff()); // stop also cancels settling/holding
+  for(char speed: {'1','2','3'}) {
+    send(speed);
+    const uint32_t interval=speed=='1'?4000:speed=='2'?3000:2000;
+    assert(runIntervalUs==interval && allOff());
+    send('n'); assert(remainingSteps==1024);
+    send(speed=='1'?'3':'1'); assert(runIntervalUs==interval);
+    while(remainingSteps) {
+      assert(stepIntervalUs()>=interval && stepIntervalUs()<=START_INTERVAL_US);
+      advance(stepIntervalUs()); checkPhase();
+    }
+    assert(completedSteps==1024 && settling);
+    advance(500000); assert(!settling && allOff());
+  }
+  send('1'); assert(runIntervalUs==4000);
   std::cout<<"PASS: idle startup, phase sequence, reversal, busy rejection, stop, "
               "micros rollover, 4096/8192 counts, settling and coil release.\n";
 }

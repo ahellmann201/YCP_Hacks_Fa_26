@@ -84,10 +84,13 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .card.confirmed { border:2px solid var(--ok); }
 .assistant { border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:8px; background:var(--focus); }
 .assistant button { font-size:14px; padding:9px 11px; }
-.camera-preview { width:100%; max-height:360px; background:#111; }
+.camera-preview { display:block; width:100%; background:#111; }
 .camera-frame { position:relative; }
 .camera-guide { position:absolute; left:30%; top:18%; width:40%; height:64%; border:3px dashed #fff; pointer-events:none; }
 .camera-guide.ready { border-color:#22c55e; }
+.camera-guide.three { left:0; top:0; width:100%; height:100%; border:0; background:linear-gradient(to right,transparent 33%,white 33%,white 33.3%,transparent 33.3%,transparent 66.3%,white 66.3%,white 66.6%,transparent 66.6%); }
+.photo-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.photo-grid img { width:120px; height:90px; object-fit:contain; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -142,7 +145,15 @@ summary { cursor:pointer; padding:12px 0; }
     <p id="connection" class="muted error"></p>
 </div>
 <section class="card" aria-labelledby="capture-heading">
-    <h2 id="capture-heading">Webcam capture</h2>
+    <h2 id="capture-heading">Capture label photos</h2>
+    <label>Capture setup<select id="capture-mode" class="field"><option value="1">One tube</option><option value="3">Three tubes on the rotating base</option></select></label>
+    <p id="three-tube-help" class="muted" hidden>Keep the iPhone fixed in landscape, with one complete tube in each third: left, middle, right. Keep the same tubes in the same positions. Automatic scan takes eight views and saves three separate samples. Keep this page visible and the phone unlocked.</p>
+    <div id="automatic-scan-controls" hidden>
+        <label>Rotation speed<select id="scan-speed"><option value="1">Original</option><option value="2">Moderate — test first</option><option value="3">Fast — experimental</option></select></label>
+        <button id="scan-three" type="button">Scan three tubes automatically</button>
+        <button id="stop-scan" type="button" disabled>Stop scan</button>
+        <p id="scan-progress" role="status" aria-live="polite">UNO Q must be connected to this laptop with automatic-scan firmware.</p>
+    </div>
     <p class="muted">Keep the tube steady, avoid glare, and rotate it to show the whole label.</p>
     <label>Camera<select id="camera-device" class="field"><option value="">Default camera</option></select></label>
     <button id="start-camera" type="button">Start camera</button>
@@ -155,6 +166,7 @@ summary { cursor:pointer; padding:12px 0; }
     <button id="capture-view" type="button">Capture view</button>
     <p id="camera-status" class="muted" role="status">Webcam needs HTTPS or localhost.</p>
     <p class="muted">Captured views join the phone photos above. Use Upload samples when ready.</p>
+    <button id="upload-captured" type="button">Upload captured sample</button>
 </section>
 <section id="review-section" aria-labelledby="review-title">
     <h2 id="review-title">Samples to review</h2>
@@ -810,37 +822,6 @@ $("#finish-export").onclick=async()=>{
     } finally { finishing=false; renderBar(); }
 };
 
-function renderPhotoQueue() {
-    const count=$("#photo-count");
-    count.hidden=!photoQueue.length;
-    count.textContent=photoQueue.length?`${photoQueue.length}/8 photos for this tube. Take another view, then upload.` : "";
-    const gallery=$("#photo-previews");
-    gallery.replaceChildren();
-    photoQueue.forEach(photo=>{
-        const image=document.createElement("img");
-        image.src=photo.previewUrl;
-        image.alt="Phone photo for this tube";
-        gallery.append(image);
-    });
-    renderBar();
-}
-function clearPhotos() {
-    photoQueue.forEach(photo=>URL.revokeObjectURL(photo.previewUrl));
-    photoQueue.length=0;
-    renderPhotoQueue();
-}
-function addPhonePhotos(files) {
-    if(photoQueue.length+files.length>8) return say("Maximum 8 photos of one tube.",true);
-    for(const file of files) {
-        if(!["image/jpeg","image/png","image/webp"].includes(file.type))
-            return say("Use JPG, PNG, or WebP. On iPhone, use Camera → Formats → Most Compatible.",true);
-        if(!file.size || file.size>10*1024*1024)
-            return say("Each photo must be nonempty and 10 MB or smaller.",true);
-    }
-    files.forEach(file=>photoQueue.push({file, previewUrl:URL.createObjectURL(file)}));
-    renderPhotoQueue();
-    say(`${photoQueue.length}/8 photos ready. Take another view or upload this tube.`);
-}
 async function uploadPhotoFiles(files) {
     uploading=true; renderBar(); say("Uploading…");
     try {
@@ -859,20 +840,9 @@ async function uploadPhotoFiles(files) {
         uploading=false; $("#photos").value=""; renderBar();
     }
 }
-$("#take-iphone-photo").onclick=()=>{
-    if(uploading || finishing || !initialized || photoQueue.length>=8) return;
-    $("#iphone-camera").value="";
-    $("#iphone-camera").click();
-};
-$("#iphone-camera").onchange=()=>{
-    const files=Array.from($("#iphone-camera").files);
-    if(files.length && !uploading && !finishing) addPhonePhotos(files);
-    $("#iphone-camera").value="";
-};
-$("#clear-photos").onclick=clearPhotos;
 $("#upload").onclick=()=>{
     if(uploading || finishing || !initialized) return;
-    if(photoQueue.length) return uploadPhotoFiles(photoQueue.map(photo=>photo.file));
+    if(photoQueue.length) return $("#upload-captured").onclick();
     $("#photos").value=""; $("#photos").click();
 };
 $("#photos").onchange=async()=>{
@@ -914,11 +884,75 @@ async function uploadArchive(file) {
     }
 }
 let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false;
-function cameraControls() {
-    $("#capture-view").disabled=!cameraStream || photoQueue.length>=8 || uploading || finishing;
+let preparingPhotos=false, captureUploadPending=false;
+let automaticScanning=false, automaticCancelled=false, automaticScanId=null, scanWakeLock=null;
+const stationNames=["Left tube","Middle tube","Right tube"];
+function cameraControls() { renderPhotoQueue(); }
+function threeTubeMode() { return $("#capture-mode").value==="3"; }
+function captureFull() { return [0,1,2].slice(0,threeTubeMode()?3:1).some(station=>photoQueue.filter(p=>(p.station||0)===station).length>=8); }
+function renderPhotoQueue() {
+    const gallery=$("#photo-previews"); gallery.replaceChildren();
+    photoQueue.forEach((photo,index)=>{
+        const box=document.createElement("div");
+        const image=document.createElement("img"); image.src=photo.url; image.alt=`Captured view ${index+1}`;
+        const caption=document.createElement("p"); caption.textContent=threeTubeMode()?stationNames[photo.station]:`View ${index+1}`;
+        const remove=document.createElement("button"); remove.type="button"; remove.textContent="Remove";
+        remove.disabled=uploading || preparingPhotos || automaticScanning;
+        remove.onclick=()=>{ URL.revokeObjectURL(photo.url); photoQueue.splice(index,1); renderPhotoQueue(); };
+        box.append(caption,image,remove); gallery.append(box);
+    });
+    $("#photo-count").hidden=!photoQueue.length;
+    $("#photo-count").textContent=`${photoQueue.length} photos ready`;
+    $("#clear-photos").hidden=!photoQueue.length;
+    $("#upload").textContent=uploading?"Uploading…":photoQueue.length?`Upload ${photoQueue.length} photos`:"Upload samples";
     $("#stop-camera").disabled=!cameraStream;
+    $("#upload-captured").disabled=uploading || finishing || preparingPhotos || automaticScanning || !photoQueue.length;
+    $("#upload-captured").textContent=threeTubeMode()?"Upload tubes as separate samples":"Upload captured sample";
+    $("#capture-view").disabled=!cameraStream || captureFull() || preparingPhotos || uploading || captureUploadPending || automaticScanning;
+    $("#capture-mode").disabled=!!photoQueue.length || preparingPhotos || uploading || automaticScanning;
+    $("#clear-photos").disabled=preparingPhotos || uploading || automaticScanning;
+    $("#take-iphone-photo").disabled=captureFull() || preparingPhotos || uploading || captureUploadPending || automaticScanning;
+    $("#scan-three").disabled=automaticScanning || uploading || finishing || preparingPhotos || !!photoQueue.length;
+    $("#stop-scan").disabled=!automaticScanning;
+    $("#scan-speed").disabled=automaticScanning;
+    $("#camera-device").disabled=automaticScanning;
+    $("#start-camera").disabled=automaticScanning;
 }
-function stopCamera() {
+async function addPhotos(files) {
+    if(preparingPhotos || uploading || finishing || captureUploadPending || automaticScanning) return;
+    preparingPhotos=true; renderPhotoQueue();
+    try {
+    for(const file of files) {
+        if(captureFull()) { say("Maximum 8 views per tube. Upload or clear this set first.",true); break; }
+        if(!["image/jpeg","image/png","image/webp"].includes(file.type) || !file.size || file.size>10*1024*1024) {
+            say("Use nonempty JPG, PNG, or WebP photos under 10 MB.",true); continue;
+        }
+        if(!threeTubeMode()) photoQueue.push({file,url:URL.createObjectURL(file),station:0});
+        else {
+            const sourceURL=URL.createObjectURL(file), source=new Image();
+            try {
+                await new Promise((resolve,reject)=>{ source.onload=resolve; source.onerror=()=>reject(new Error("Could not read photo.")); source.src=sourceURL; });
+                if(source.naturalWidth<source.naturalHeight) throw new Error("Use a landscape photo with the three tubes side by side.");
+                const crops=[];
+                for(let station=0;station<3;station++) {
+                    const left=Math.floor(source.naturalWidth*station/3), right=Math.floor(source.naturalWidth*(station+1)/3);
+                    const canvas=document.createElement("canvas"); canvas.width=right-left; canvas.height=source.naturalHeight;
+                    canvas.getContext("2d").drawImage(source,left,0,canvas.width,canvas.height,0,0,canvas.width,canvas.height);
+                    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.95));
+                    if(!blob || blob.size>10*1024*1024) throw new Error("Could not prepare a crop under 10 MB. Use a smaller photo.");
+                    const crop=new File([blob],`tube_${station+1}_${Date.now()}.jpg`,{type:"image/jpeg"});
+                    crops.push({file:crop,station});
+                }
+                crops.forEach(crop=>photoQueue.push({...crop,url:URL.createObjectURL(crop.file)}));
+            } finally { URL.revokeObjectURL(sourceURL); }
+        }
+    }
+    } catch(error) { say(error.message,true); }
+    finally { preparingPhotos=false; renderPhotoQueue(); }
+}
+function clearPhotos() { photoQueue.forEach(photo=>URL.revokeObjectURL(photo.url)); photoQueue.length=0; captureUploadPending=false; renderPhotoQueue(); }
+function stopCamera(preserveScan=false) {
+    if(automaticScanning && preserveScan!==true) cancelAutomaticScan();
     if(cameraStream) cameraStream.getTracks().forEach(track=>track.stop());
     cameraStream=null;
     $("#camera-preview").srcObject=null;
@@ -927,30 +961,33 @@ function stopCamera() {
     cameraControls();
 }
 async function startCamera() {
-    stopCamera();
-    if(!navigator.mediaDevices?.getUserMedia) {
-        $("#camera-status").textContent="Open over HTTPS or localhost for webcam access.";
-        return;
-    }
+    stopCamera(true);
+    if(!navigator.mediaDevices?.getUserMedia) { $("#camera-status").textContent="Camera unavailable: open this page directly in Safari using HTTPS, and enable trust for Three Tube Scanner Local CA in iPhone Certificate Trust Settings."; return; }
+    $("#camera-status").textContent="Waiting for camera permission—choose Allow if Safari asks.";
     try {
-        cameraStream=await navigator.mediaDevices.getUserMedia({
-            video:{deviceId:$("#camera-device").value?{exact:$("#camera-device").value}:undefined},audio:false
-        });
-        const video=$("#camera-preview");
-        video.srcObject=cameraStream;
+        const videoOptions={width:{ideal:3840},height:{ideal:2160}};
+        if($("#camera-device").value) videoOptions.deviceId={exact:$("#camera-device").value};
+        else videoOptions.facingMode={ideal:"environment"};
+        cameraStream=await navigator.mediaDevices.getUserMedia({video:videoOptions,audio:false});
+        const preview=$("#camera-preview");
+        preview.muted=true; preview.playsInline=true; preview.autoplay=true;
+        preview.srcObject=cameraStream;
         $("#camera-frame").hidden=false;
-        await video.play();
-        const devices=await navigator.mediaDevices.enumerateDevices();
+        await preview.play();
+        // Camera enumeration is optional; failure must not close a working preview.
+        const devices=await navigator.mediaDevices.enumerateDevices().catch(()=>[]);
         const choice=$("#camera-device"), selected=choice.value;
         choice.replaceChildren(new Option("Default camera",""));
         devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>
             choice.append(new Option(device.label||`Camera ${index+1}`,device.deviceId)));
         choice.value=selected;
         $("#camera-status").textContent="Camera ready. Center the label and rotate for another view.";
-        cameraControls();
+        renderPhotoQueue();
     } catch(error) {
         stopCamera();
-        $("#camera-status").textContent="Could not start camera: "+error.message;
+        const help=error.name==="NotAllowedError" ? " Allow camera access in Safari's settings for this website, then retry. Also check that the local certificate is trusted." :
+            error.name==="NotReadableError" ? " Close other camera apps, then retry." : "";
+        $("#camera-status").textContent=`Could not start camera (${error.name}): ${error.message}.${help}`;
     }
 }
 function cameraSample() {
@@ -980,16 +1017,15 @@ function labelDetail(gray) {
 }
 async function captureView(automatic=false) {
     const video=$("#camera-preview");
-    if(!cameraStream || !video.videoWidth || photoQueue.length>=8 || uploading || finishing) return;
+    if(!cameraStream || !video.videoWidth || captureFull() || preparingPhotos || uploading || captureUploadPending) return;
     const canvas=document.createElement("canvas"); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
     canvas.getContext("2d").drawImage(video,0,0);
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.93));
-    if(blob) addPhonePhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{type:"image/jpeg"})]);
-    cameraControls();
+    if(blob) await addPhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{type:"image/jpeg"})]);
     if(automatic) $("#camera-status").textContent="View captured. Rotate the tube for the next view.";
 }
 function checkAutoCapture() {
-    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || photoQueue.length>=8 || document.hidden) return;
+    if(threeTubeMode() || preparingPhotos || !$("#auto-capture").checked || !cameraStream || uploading || autoBusy || captureFull() || document.hidden) return;
     const sample=cameraSample(); if(!sample) return;
     const detailed=labelDetail(sample), moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
     autoPrevious=sample;
@@ -1002,15 +1038,119 @@ function checkAutoCapture() {
     captureView(true).finally(()=>{ autoCaptured=sample; autoStableSince=0; autoBusy=false; });
 }
 $("#start-camera").onclick=startCamera;
+$("#capture-mode").onchange=()=>{
+    $("#three-tube-help").hidden=!threeTubeMode();
+    $("#automatic-scan-controls").hidden=!threeTubeMode();
+    $("#camera-guide").classList.toggle("three",threeTubeMode());
+    $("#auto-capture").disabled=threeTubeMode();
+    autoPrevious=null; autoCaptured=null; autoStableSince=0;
+    renderPhotoQueue();
+};
+$("#auto-capture").onchange=()=>{ autoPrevious=null; autoCaptured=null; autoStableSince=0; };
 $("#stop-camera").onclick=stopCamera;
 $("#camera-device").onchange=()=>{ if(cameraStream) startCamera(); };
 $("#capture-view").onclick=()=>{ autoCaptured=cameraSample(); captureView(); };
-$("#auto-capture").onchange=()=>{ autoPrevious=null; autoCaptured=null; autoStableSince=0; };
+$("#take-iphone-photo").onclick=()=>{ $("#iphone-camera").value=""; $("#iphone-camera").click(); };
+$("#iphone-camera").onchange=()=>{ addPhotos(Array.from($("#iphone-camera").files)); $("#iphone-camera").value=""; };
+$("#clear-photos").onclick=clearPhotos;
+$("#upload-captured").onclick=async()=>{
+    if(uploading || finishing || preparingPhotos || !photoQueue.length) return;
+    uploading=true; captureUploadPending=true; renderBar(); renderPhotoQueue(); say("Uploading captured views…");
+    try {
+        await ensureSession();
+        for(const station of [...new Set(photoQueue.map(photo=>photo.station||0))].sort()) {
+            const group=photoQueue.filter(photo=>(photo.station||0)===station);
+            const form=new FormData();
+            group.forEach(photo=>form.append("files",photo.file));
+            form.append("session_id",sessionId); form.append("date_received",today());
+            await api("/upload",{method:"POST",body:form});
+            for(const photo of group) { URL.revokeObjectURL(photo.url); photoQueue.splice(photoQueue.indexOf(photo),1); }
+        }
+        captureUploadPending=false;
+        say("Queued as separate tube samples. Review their labels below."); await refresh();
+    } catch(error) { say(error.message+" Remaining photos are kept. Check the session for uploads already received before retrying; do not add new views to this set.",true); }
+    finally { uploading=false; renderBar(); renderPhotoQueue(); }
+};
 window.addEventListener("pagehide",stopCamera);
 setInterval(checkAutoCapture,200);
-cameraControls();
+renderPhotoQueue();
+async function cancelAutomaticScan() {
+    automaticCancelled=true;
+    $("#scan-progress").textContent="Stopping scan…";
+    if(automaticScanId) {
+        try { await api(`/capture-scans/${automaticScanId}/stop`,{method:"POST"}); }
+        catch(_) { $("#scan-progress").textContent="Connection lost. The motor watchdog will stop movement."; }
+    }
+}
+function checkAutomaticCamera() {
+    const video=$("#camera-preview");
+    if(automaticCancelled || document.hidden || !cameraStream || !video.videoWidth || video.paused || video.ended ||
+       !cameraStream.getVideoTracks().some(track=>track.readyState==="live" && !track.muted)) throw new Error("Scan stopped: camera is unavailable or the page was hidden.");
+    if(video.videoWidth<video.videoHeight || video.videoWidth<900) throw new Error("Use landscape with all three tubes visible; camera width must be at least 900 pixels.");
+    return video;
+}
+async function freshAutomaticFrame() {
+    const video=checkAutomaticCamera();
+    // Request frames after motor DONE, rather than reusing a buffered moving frame.
+    if(video.requestVideoFrameCallback) {
+        await new Promise((resolve,reject)=>{
+            let count=0, handle;
+            const timeout=setTimeout(()=>{ if(handle!==undefined) video.cancelVideoFrameCallback(handle);reject(new Error("Camera stopped delivering frames.")); },3000);
+            const next=()=>{ if(++count>=2) {clearTimeout(timeout);resolve();} else handle=video.requestVideoFrameCallback(next); };
+            handle=video.requestVideoFrameCallback(next);
+        });
+    } else await new Promise(resolve=>setTimeout(resolve,350));
+    checkAutomaticCamera();
+    const canvas=document.createElement("canvas"); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    canvas.getContext("2d").drawImage(video,0,0);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.95));
+    if(!blob || blob.size>10*1024*1024) throw new Error("Could not capture a camera frame under 10 MB.");
+    return blob;
+}
+$("#stop-scan").onclick=cancelAutomaticScan;
+$("#scan-three").onclick=async()=>{
+    if(automaticScanning || uploading || finishing || photoQueue.length || !threeTubeMode()) return;
+    automaticCancelled=false; automaticScanId=null;
+    try {
+        // This runs in the button gesture so Safari can request camera permission.
+        automaticScanning=true; uploading=true; renderBar(); renderPhotoQueue();
+        if(!cameraStream) await startCamera();
+        if(!cameraStream) throw new Error("Start the rear camera over HTTPS before scanning.");
+        checkAutomaticCamera();
+        await ensureSession();
+        const scan=await api('/capture-scans',post({session_id:sessionId,date_received:today(),speed:Number($("#scan-speed").value)}));
+        automaticScanId=scan.scan_id;
+        if(automaticCancelled) throw new Error("Scan cancelled.");
+        try { if(navigator.wakeLock) scanWakeLock=await navigator.wakeLock.request('screen'); } catch(_) {}
+        for(let view=0;view<8;view++) {
+            checkAutomaticCamera();
+            if(view) {
+                $("#scan-progress").textContent=`Rotating to view ${view+1} of 8…`;
+                await api(`/capture-scans/${automaticScanId}/advance`,post({view}));
+            }
+            const blob=await freshAutomaticFrame();
+            $("#scan-progress").textContent=`Saving view ${view+1} of 8 for all three tubes…`;
+            const form=new FormData(); form.append('view',String(view));form.append('file',blob,`view_${view}.jpg`);
+            await api(`/capture-scans/${automaticScanId}/views`,{method:'POST',body:form});
+        }
+        checkAutomaticCamera();
+        const result=await api(`/capture-scans/${automaticScanId}/finish`,{method:'POST'});
+        $("#scan-progress").textContent=`Saved ${result.queued_samples} separate tubes with 8 views each. Review the samples below.`;
+        await refresh();
+    } catch(error) {
+        if(automaticScanId) await cancelAutomaticScan();
+        $("#scan-progress").textContent=error.message+" No further rotations will be requested. Check the session before starting again.";
+    } finally {
+        if(scanWakeLock) {await scanWakeLock.release().catch(()=>{});scanWakeLock=null;}
+        automaticScanning=false; uploading=false; automaticScanId=null; renderBar(); renderPhotoQueue();
+    }
+};
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && automaticScanning) cancelAutomaticScan(); });
+window.addEventListener('pagehide',()=>{
+    if(automaticScanId) fetch(`/capture-scans/${automaticScanId}/stop`,{method:'POST',keepalive:true}).catch(()=>{});
+});
 window.addEventListener("beforeunload",event=>{
-    if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
+    if(automaticScanning || uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
     }
 });
