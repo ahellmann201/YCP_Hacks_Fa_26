@@ -10,7 +10,11 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scanner.reading.ocr_settings import ocr_threads, rapidocr_parameters
-from scanner.reading.field_text import strip_heading, visually_empty
+from scanner.reading.field_text import (
+    keep_added_character, keep_complete_page_reading, prefer_explicit_rn,
+    repair_lone_i, restore_page_word_gap, separate_number_code, strip_heading,
+    visually_empty,
+)
 from scanner.reading.reading_quality import crop_quality
 from scanner.reading.sample_dates import extract_written_date
 
@@ -137,25 +141,25 @@ def raw_values(text, label_type):
     if label_type == "small":
         patterns = {
             "machine":
-                r"\bRN\s*:?\s*(.*?)(?=\bDate|\bSN\b|$)",
+                r"\bRN\s*:?\s*(.*?)(?=\s*(?:\bDate|\bSN\b|\n|$))",
 
             "serial_number":
-                r"\bSN\s*:?\s*(.*?)(?=\bDate|$)",
+                r"\bSN\s*:?\s*(.*?)(?=\s*(?:\bDate|\n|$))",
         }
 
     else:
         patterns = {
             "machine":
                 r"\bEquip(?:ment)?\s*(?:ID)?\s*:?\s*(.*?)"
-                r"(?=\bSample\s*point|\bRef|\bDate|$)",
+                r"(?=\s*(?:\bSample\s*point|\bRef|\bDate|\n|$))",
 
             "component":
                 r"\bSample\s*point\s*:?\s*(.*?)"
-                r"(?=\bRef|\bDate|$)",
+                r"(?=\s*(?:\bRef|\bDate|\n|$))",
 
             "reference_lube":
                 r"\bRef(?:erence)?\s*lube\s*:?\s*(.*?)"
-                r"(?=\bDate|$)",
+                r"(?=\s*(?:\bDate|\n|$))",
         }
 
     for name, pattern in patterns.items():
@@ -735,7 +739,9 @@ def process(job):
                     from scanner.vision.crop_adjustments import tighten_field_right
                     focused=tighten_field_right(crop)
                     if focused.shape!=crop.shape:
-                        if score is None or score<.95:
+                        base=strip_heading(recognized,field,label_type)
+                        date_missing=field=='date_sampled' and not extract_written_date(base)
+                        if score is None or score<.95 or not base or date_missing:
                             focused_scores=[]
                             candidate=clean(field_reader.read(focused[...,::-1].copy(),field,label_type,
                                 fallback=lambda:' '.join(read_text(engine,focused,line=True,confidence=focused_scores))))
@@ -743,14 +749,21 @@ def process(job):
                             candidate_score=field_reader.last_confidence
                             if candidate_score is None and focused_scores:
                                 candidate_score=min(focused_scores)
-                            base=strip_heading(recognized,field,label_type)
                             entry.setdefault('focus_attempts',{})[field]=[{'text':base,'score':score},
                                 {'text':candidate,'score':candidate_score}]
-                            if base and candidate.casefold()!=base.casefold():
+                            added=keep_added_character(base,candidate)
+                            if field=='date_sampled' and extract_written_date(candidate) and not extract_written_date(base):
+                                recognized,score=candidate,candidate_score
+                            elif base and candidate.casefold()!=base.casefold() and added==base:
                                 entry['warnings'].append(f'{field}: broad and tight crops disagree; original reading kept. Verify the full value.')
+                            elif added!=base:
+                                entry['warnings'].append(f'{field}: tight crop restored a missing character; kept {added}.')
+                                recognized,score=added,candidate_score
                             else:
                                 from scanner.vision.crop_adjustments import can_fill_empty_from_focus
-                                if can_fill_empty_from_focus(base,candidate,candidate_score,field,
+                                if field=='date_sampled' and not base and extract_written_date(candidate):
+                                    recognized,score=candidate,candidate_score
+                                elif can_fill_empty_from_focus(base,candidate,candidate_score,field,
                                     job.get('date_received',''),crop_quality(focused)):
                                     recognized,score=candidate,candidate_score
                         crop=focused
@@ -759,6 +772,17 @@ def process(job):
                     entry.setdefault('field_scores', {})[field] = score
                     entry.setdefault('field_quality', {})[field] = crop_quality(crop)
                     recognized = strip_heading(recognized,field,label_type)
+                    if field == 'component':
+                        recognized = restore_page_word_gap(values.get(field, ''), separate_number_code(recognized))
+                    if field == 'reference_lube':
+                        recognized = repair_lone_i(recognized)
+                    if field == 'machine':
+                        restored = keep_complete_page_reading(values.get(field, ''), recognized)
+                        if restored != recognized:
+                            entry['warnings'].append(
+                                f'{field}: crop cut off the full-label number; kept {restored}.'
+                            )
+                            recognized = restored
                     if (not recognized and entry.get('alignment_method')=='tight_large_label'
                         and not any(w.startswith(field+':') for w in entry['warnings'])
                         and visually_empty(crop)):
@@ -799,6 +823,7 @@ def process(job):
                                 "UP" + recognized
                             )
 
+                        recognized = prefer_explicit_rn(values.get(field, ''), recognized)
                         values[field] = recognized
 
                     else:

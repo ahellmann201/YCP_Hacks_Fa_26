@@ -34,6 +34,13 @@ class AdjustmentTests(unittest.TestCase):
     def test_dates_do_not_silently_drop_a_year(self):
         self.assertEqual(extract_written_date('4.13+34'),'4.13+34')
         self.assertEqual(extract_written_date('4.13?34'),'')
+        self.assertEqual(extract_written_date('812/26'),'8/12/26')
+        self.assertEqual(extract_written_date('811226'),'8/12/26')
+        self.assertEqual(extract_written_date('111226'),'')
+        self.assertEqual(extract_written_date('920'),'9/20')
+        self.assertEqual(extract_written_date('1/0'),'')
+        self.assertEqual(extract_written_date('92866'),'')
+        self.assertEqual(extract_written_date('112'),'')
         self.assertTrue(sampled_date_issue('4.13+34','2026-11-07'))
         self.assertTrue(sampled_date_issue('02/30/2026','2026-11-07'))
         self.assertFalse(sampled_date_issue('04/13/2026','2026-11-07'))
