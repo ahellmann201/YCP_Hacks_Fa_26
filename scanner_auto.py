@@ -260,6 +260,7 @@ def prepare_field_crop(
     region,
     warnings,
     barcode_box=None,
+    refine=True,
 ):
     import numpy as np
 
@@ -334,9 +335,9 @@ def prepare_field_crop(
 
         warnings.append(f'{field}: crop reaches the photo edge. Verify the complete value against the original.')
 
-    if field=='date_sampled':
-        from crop_adjustments import focus_date_ink
-        crop=focus_date_ink(crop)
+    if refine:
+        from crop_adjustments import refine_field_crop
+        crop=refine_field_crop(crop,field)
     return crop
 
 
@@ -635,11 +636,21 @@ def process(job):
                         region,
                         entry["warnings"],
                         barcode_box=entry.get('barcode_box'),
+                        refine=False,
                     )
 
                     if crop is None:
                         values[field] = ""
                         continue
+
+                    # Retain the broad aligned box for comparison with stage two.
+                    box_name=f'photo_{index}_{field}_box.jpg'
+                    save_rgb(output_dir/box_name,crop)
+                    entry['debug'].append(box_name)
+                    from crop_adjustments import refine_field_crop
+                    box_shape=list(crop.shape[:2])
+                    crop=refine_field_crop(crop,field)
+                    entry.setdefault('crop_stages',{})[field]={'box_shape':box_shape}
 
                     filename = (
                         f"photo_{index}_{field}.jpg"
@@ -702,6 +713,30 @@ def process(job):
                                 entry['warnings'].append(f'{field}: original and thin-ink OCR differ; verify the crop.')
                             if prefer_thinned_reading(base,score,candidate,candidate_score,field,job.get('date_received','')):
                                 recognized,score=candidate,candidate_score
+                    from crop_adjustments import tighten_field_right
+                    focused=tighten_field_right(crop)
+                    if focused.shape!=crop.shape:
+                        if score is None or score<.95:
+                            focused_scores=[]
+                            candidate=clean(field_reader.read(focused[...,::-1].copy(),field,label_type,
+                                fallback=lambda:' '.join(read_text(engine,focused,line=True,confidence=focused_scores))))
+                            candidate=strip_heading(candidate,field,label_type)
+                            candidate_score=field_reader.last_confidence
+                            if candidate_score is None and focused_scores:
+                                candidate_score=min(focused_scores)
+                            base=strip_heading(recognized,field,label_type)
+                            entry.setdefault('focus_attempts',{})[field]=[{'text':base,'score':score},
+                                {'text':candidate,'score':candidate_score}]
+                            if base and candidate.casefold()!=base.casefold():
+                                entry['warnings'].append(f'{field}: broad and tight crops disagree; original reading kept. Verify the full value.')
+                            else:
+                                from crop_adjustments import can_fill_empty_from_focus
+                                if can_fill_empty_from_focus(base,candidate,candidate_score,field,
+                                    job.get('date_received',''),crop_quality(focused)):
+                                    recognized,score=candidate,candidate_score
+                        crop=focused
+                        save_rgb(output_dir/filename,crop)
+                    entry['crop_stages'][field]['focused_shape']=list(crop.shape[:2])
                     entry.setdefault('field_scores', {})[field] = score
                     entry.setdefault('field_quality', {})[field] = crop_quality(crop)
                     recognized = strip_heading(recognized,field,label_type)

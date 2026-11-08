@@ -84,3 +84,59 @@ def focus_date_ink(crop,minimum_width_fraction=.35):
     padding=max(3,round(height*.07))
     return crop[max(0,top-padding):min(height,bottom+padding),
                 max(0,left-padding):min(width,right+padding)].copy()
+
+
+def tighten_field_right(crop):
+    """Second-stage right-edge trim; original top/left/bottom pixels stay intact."""
+    import cv2
+    import numpy as np
+    gray=cv2.cvtColor(crop,cv2.COLOR_RGB2GRAY)
+    height,width=gray.shape
+    if height<20 or width<50:
+        return crop
+    ink=(gray<float(np.median(gray))-35).astype('uint8')*255
+    rule=cv2.morphologyEx(ink,cv2.MORPH_OPEN,np.ones((1,max(25,int(width*.5))),np.uint8))
+    foreground=cv2.bitwise_and(ink,cv2.bitwise_not(rule))
+    count,_,stats,_=cv2.connectedComponentsWithStats(foreground,8)
+    components=[]
+    for x,y,w,h,area in stats[1:]:
+        if h<height*.18 or area<8:
+            continue
+        # A narrow crease spanning both image boundaries is not a text ending.
+        # Never discard a detached/short digit solely because it is thin.
+        if x>width*.45 and y<=2 and y+h>=height-2 and w<max(4,height*.12):
+            continue
+        components.append((x,y,w,h,area))
+    if not components:
+        return crop
+    tallest=max(c[3] for c in components)
+    main=[c for c in components if c[3]>=tallest*.60]
+    if not main:
+        return crop
+    right=max(c[0]+c[2] for c in main)
+    # Retain smaller following strokes/separators in the same vertical text band.
+    top=min(c[1] for c in main);bottom=max(c[1]+c[3] for c in main)
+    band_top=top+(bottom-top)*.20
+    band_bottom=bottom-(bottom-top)*.20
+    for x,y,w,h,area in components:
+        center=y+h/2
+        if h>=max(3,tallest*.20) and band_top<=center<=band_bottom:
+            right=max(right,x+w)
+    right=min(width,right+max(8,round(height*.15)))
+    if right>=width-max(5,int(width*.03)) or right<20:
+        return crop
+    return crop[:,:right].copy()
+
+
+def refine_field_crop(crop,field,trim_right=False):
+    if trim_right:
+        crop=tighten_field_right(crop)
+    return focus_date_ink(crop) if field=='date_sampled' else crop
+
+
+def can_fill_empty_from_focus(original,candidate,score,field,received,quality_reasons):
+    import math
+    from sample_dates import extract_written_date,sampled_date_issue
+    if original or not candidate or not isinstance(score,(int,float)) or not math.isfinite(score) or score<.95 or quality_reasons:
+        return False
+    return field!='date_sampled' or bool(extract_written_date(candidate) and not sampled_date_issue(candidate,received))
