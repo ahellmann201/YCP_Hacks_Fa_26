@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import hashlib
 import io
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import List, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -23,12 +24,15 @@ from scanner.io.session_store import SessionError
 from scanner.io.zip_import import prepare_archive, ImportError as BatchImportError
 from scanner.reading.sample_dates import normalize_sample_date, sampled_date_issue
 from scanner.io.session_cleanup import empty_uploads
+from scanner.io.motor_link import send_command
+from grok_assistant import AssistantRequest, AssistantService, FIELDS
 
 BASE = Path(__file__).resolve().parent
 UPLOADS = BASE / "uploads"
 UPLOADS.mkdir(exist_ok=True)
 STORE = QueueStore(BASE / "scanner.sqlite3")
 QUEUE = ScannerQueue(STORE, BASE)
+ASSISTANT = AssistantService(STORE)
 BOOT_ID = uuid4().hex
 
 @asynccontextmanager
@@ -37,9 +41,15 @@ async def lifespan(app):
     STORE.close_after_upload_reset()
     logging.info("Cleared %s upload entries on startup", removed)
     QUEUE.start()
+    assistant_maintenance = asyncio.create_task(ASSISTANT.maintenance())
     try:
         yield
     finally:
+        assistant_maintenance.cancel()
+        try:
+            await assistant_maintenance
+        except asyncio.CancelledError:
+            pass
         QUEUE.stop()
 
 app = FastAPI(lifespan=lifespan)
@@ -102,6 +112,9 @@ class Review(BaseModel):
     label_type: Literal["small", "large", "unknown"]
     confirmed: bool = False
     fields: Fields
+    expected_revision: int | None = None
+    suggestion_request_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    suggestion_field: str | None = None
 
 
 class FinishExport(BaseModel):
@@ -115,7 +128,23 @@ def home():
 
 @app.get("/app")
 def app_info():
-    return {"boot_id": BOOT_ID}
+    import os
+    enabled = os.getenv("ASSISTANT_ENABLED", "").lower() in {"1", "true", "yes"} and bool(os.getenv("XAI_API_KEY"))
+    return {"boot_id": BOOT_ID, "assistant_available": enabled,
+            "assistant_image_available": enabled and os.getenv("ASSISTANT_IMAGE_ENABLED", "").lower() in {"1", "true", "yes"},
+            "motor_available": bool(os.getenv("SCANNER_MOTOR_PORT", "").strip())}
+
+
+class MotorCommand(BaseModel):
+    command: str = Field(pattern=r"^[jmtnsr123JMTNSR?]$")
+
+
+@app.post("/live/motor")
+def live_motor(body: MotorCommand):
+    try:
+        return send_command(body.command, wait_done=body.command.lower() in {"n", "j", "m", "t"})
+    except Exception as error:
+        raise HTTPException(503, f"Motor link failed: {str(error)[:160]}")
 
 @app.post("/sessions")
 def create_session(value: NewSession):
@@ -204,8 +233,7 @@ def combined_image(record_id: str):
     return FileResponse(path)
 
 
-@app.get('/samples/{record_id}/fields/{field}')
-def field_image(record_id: str, field: str):
+def _field_path(record_id: str, field: str):
     if field not in {'sample_id', 'machine', 'date_sampled', 'component', 'serial_number', 'reference_lube'}:
         raise HTTPException(404, 'Field crop unavailable.')
     folder = folder_for(record_id)
@@ -224,25 +252,32 @@ def field_image(record_id: str, field: str):
     root = folder/'analysis'/run
     path = root/f'field_{key}.jpg'
     if not path.is_file():
-        # Older records already have the individual text crops.
         number = evidence.get('sources', {}).get(key)
         if isinstance(number, int) and 1 <= number <= 8:
             path = root/f'photo_{number}_{key}.jpg'
     if not path.is_file():
-        # The preview's selected-photo reference can be absent on older scans.
-        # Look for this exact field in every photo in the same analysis run.
         path = next((root/f'photo_{number}_{key}.jpg' for number in range(1, 9)
                      if (root/f'photo_{number}_{key}.jpg').is_file()), path)
     if not path.is_file():
         raise HTTPException(404, 'Field crop unavailable. Check original photos.')
-    return FileResponse(path)
+    return path
+
+@app.get('/samples/{record_id}/fields/{field}')
+def field_image(record_id: str, field: str):
+    return FileResponse(_field_path(record_id, field))
+
+@app.post("/sessions/{session_id}/samples/{record_id}/assistant")
+async def ask_assistant(session_id: str, record_id: str, request: AssistantRequest, connection: Request):
+    crop = _field_path(record_id, request.field) if request.action == "read" and request.field != "date_received" else None
+    return await ASSISTANT.run(session_id, record_id, request, crop, connection.client.host if connection.client else "unknown")
 
 @app.post("/samples/{record_id}/review")
 def edit_review(record_id: str, request: Review):
     folder = folder_for(record_id)
+    submitted_fields = request.fields.model_dump()
     fields = {
         key: value.strip()
-        for key, value in request.fields.model_dump().items()
+        for key, value in submitted_fields.items()
     }
     fields["serial_number"] = fields["serial_number"].upper()
     fields['date_sampled'] = normalize_sample_date(fields['date_sampled'])
@@ -264,9 +299,15 @@ def edit_review(record_id: str, request: Review):
             if not re.fullmatch(r"[1-6] (?:GS|NGS)", fields["component"]):
                 raise HTTPException(400, "Component must look like 4 GS.")
 
+    suggestion = None
+    if request.suggestion_request_id:
+        if not request.suggestion_field or request.suggestion_field not in FIELDS or request.expected_revision is None or request.confirmed:
+            raise HTTPException(400, "Suggestion must be applied to an unconfirmed review.")
+        suggestion = ASSISTANT.suggestion(request.session_id, record_id, request.suggestion_request_id,
+            request.suggestion_field, request.expected_revision, submitted_fields[request.suggestion_field])
     review = STORE.edit(
         request.session_id, record_id, fields,
-        request.label_type, request.confirmed,
+        request.label_type, request.confirmed, request.expected_revision, suggestion,
     )
     try:
         QUEUE.snapshot(folder / "review.json", review)

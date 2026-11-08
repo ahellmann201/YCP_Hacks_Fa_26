@@ -86,6 +86,13 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .camera-frame { position:relative; }
 .camera-guide { position:absolute; left:30%; top:18%; width:40%; height:64%; border:3px dashed #fff; pointer-events:none; }
 .camera-guide.ready { border-color:#22c55e; }
+.assistant { border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:8px; background:var(--focus); }
+.assistant button { font-size:14px; padding:9px 11px; }
+.demo-close { margin-top:16px; }
+.bar-row { display:grid; grid-template-columns:148px 1fr 64px; gap:8px; align-items:center; margin:6px 0; font-size:14px; }
+.bar { height:14px; background:var(--line); border-radius:7px; overflow:hidden; }
+.bar span { display:block; height:100%; background:#2563eb; }
+.bar.baseline span { background:#94a3b8; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -120,7 +127,7 @@ summary { cursor:pointer; padding:12px 0; }
     <div id="photo-previews" class="photo-grid"></div>
     <section id="live-demo" aria-labelledby="capture-heading">
         <h2 id="capture-heading">Live demo</h2>
-        <p class="muted">Keep the tube steady, avoid glare, and rotate it to show the whole label. Captured views join the photos above.</p>
+        <p class="muted">Start the camera, keep each label face steady, and the view is captured. The motor then turns to the next face. Eight views, or Stop camera, uploads that tube for review.</p>
         <label>Camera<select id="camera-device" class="field"><option value="">Default camera</option></select></label>
         <button id="start-camera" type="button">Start camera</button>
         <button id="stop-camera" type="button">Stop camera</button>
@@ -149,6 +156,18 @@ summary { cursor:pointer; padding:12px 0; }
             <p id="accuracy-detail" class="muted">Confirm reviewed samples to measure accuracy.</p>
         </div>
     </div>
+    <section class="demo-close" aria-label="Demo comparison">
+        <h2>Where this lands</h2>
+        <p class="muted">Time per tube. By hand is the 30-second target. The scanner bar is the recorded three-thread Pi run, 20.8 seconds, leaving out upload and review.</p>
+        <div class="bar-row"><span>By hand</span><div class="bar baseline"><span style="width:100%"></span></div><strong>30s</strong></div>
+        <div class="bar-row"><span>Scanner</span><div class="bar"><span style="width:69.3%"></span></div><strong>20.8s</strong></div>
+        <div class="bar-row" id="session-time-row" hidden><span>This session</span><div class="bar"><span id="session-time-bar"></span></div><strong id="session-time-value">—</strong></div>
+        <p class="muted">Exact fields on the small development set used to check the trained reader: 5 of 9 before that training, 6 of 9 after. This session fills in as confirmed reviews come back.</p>
+        <div class="bar-row"><span>Before training</span><div class="bar baseline"><span style="width:55.6%"></span></div><strong>5/9</strong></div>
+        <div class="bar-row"><span>Trained reader</span><div class="bar"><span style="width:66.7%"></span></div><strong>6/9</strong></div>
+        <div class="bar-row" id="session-accuracy-row" hidden><span>This session</span><div class="bar"><span id="session-accuracy-bar"></span></div><strong id="session-accuracy-value">—</strong></div>
+        <p class="muted">Next is 1,000 samples. That is the set that teaches more handwriting and is how the time per tube comes down further from the 30 seconds it takes by hand.</p>
+    </section>
     <p class="muted">Timing leaves out upload, waiting, and review; accuracy uses confirmed fields only, and a confident reading can still be wrong.</p>
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
@@ -184,6 +203,7 @@ const names = [
 const cards = new Map();
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
+let assistantAvailable = false, assistantImageAvailable = false;
 const photoQueue = [];
 
 function say(text,error=false) {
@@ -321,7 +341,19 @@ function renderBar() {
         $("#average-detail").textContent=Number.isFinite(average)
             ? `${metrics.timed_tubes} tubes · ${average<=30?"Within":"Over"} 30s average target`
             : "No timed tubes yet.";
+        const sessionTime=$("#session-time-row");
+        if(Number.isFinite(average)) {
+            sessionTime.hidden=false;
+            $("#session-time-value").textContent=`${average.toFixed(1)}s`;
+            $("#session-time-bar").style.width=`${Math.min(100, average/30*100)}%`;
+        }
         const accuracy=metrics.field_accuracy_percent;
+        const sessionAccuracy=$("#session-accuracy-row");
+        if(Number.isFinite(accuracy)) {
+            sessionAccuracy.hidden=false;
+            $("#session-accuracy-value").textContent=`${accuracy.toFixed(0)}%`;
+            $("#session-accuracy-bar").style.width=`${Math.max(0, Math.min(100, accuracy))}%`;
+        }
         $("#field-accuracy").textContent=Number.isFinite(accuracy)?`${accuracy.toFixed(1)}%`:"—";
         $("#accuracy-detail").textContent=Number.isFinite(accuracy)
             ? `${metrics.correct_fields} correct / ${metrics.total_fields} fields · ${metrics.scored_tubes} confirmed tubes`
@@ -350,8 +382,13 @@ function saveCard(c,confirmed) {
     const version=c.version;
     const payload={
         session_id:sessionId, label_type:c.type.value,
-        confirmed, fields:values(c)
+        confirmed, fields:values(c),
+        expected_revision:c.revision||0
     };
+    if(c.suggestion) {
+        payload.suggestion_request_id=c.suggestion.request_id;
+        payload.suggestion_field=c.suggestion.field;
+    }
     writes++;
     c.operations++;
     c.check.disabled=true;
@@ -364,6 +401,8 @@ function saveCard(c,confirmed) {
         session=result.session;
         if(version===c.version) {
             c.dirty=false;
+            c.suggestion=null;
+            if(Number.isInteger(result.review?.revision)) c.revision=result.review.revision;
             c.serverConfirmed=confirmed;
             c.check.checked=confirmed;
             c.el.hidden=confirmed;
@@ -384,9 +423,15 @@ function saveCard(c,confirmed) {
     });
     return c.tail;
 }
-function edited(c) {
+function edited(c, fromSuggestion=false) {
     const wasConfirmed=c.check.checked || c.serverConfirmed;
     c.version++;
+    if(!fromSuggestion) c.suggestion=null;
+    if(c.assistantResult && c.assistantOutput) {
+        c.assistantResult=null;
+        c.assistantOutput.textContent="Review changed. Ask again for a current suggestion.";
+    }
+    c.assistantHistory=[];
     c.dirty=true;
     c.check.checked=false;
     c.serverConfirmed=false;
@@ -395,6 +440,82 @@ function edited(c) {
     fieldStates(c);
     if(wasConfirmed) saveCard(c,false);
     else c.timer=setTimeout(()=>saveCard(c,false),600);
+}
+function addAssistant(c) {
+    const panel=document.createElement("section"); panel.className="assistant";
+    const heading=document.createElement("h3"); heading.textContent="Review assistant";
+    const note=document.createElement("p"); note.className="muted";
+    note.textContent=assistantAvailable
+        ? "Choose a field. Only Ask Grok to read this field sends an image. AI suggestions stay separate from saved values. Check every reading and confirm the sample yourself."
+        : "Cloud assistance is unavailable. Warning and photo help work locally; review and CSV still work.";
+    const field=document.createElement("select"); field.className="field";
+    names.forEach(([key,label])=>field.append(new Option(label,key)));
+    const answer=document.createElement("p"); answer.className="status"; answer.setAttribute("role","status");
+    c.assistantOutput=answer;
+    const question=document.createElement("input"); question.className="field"; question.maxLength=500;
+    question.placeholder="Question about this sample or scanner";
+    const use=document.createElement("button"); use.type="button"; use.textContent="Use suggestion"; use.hidden=true;
+    const button=(label,action)=>{
+        const control=document.createElement("button"); control.type="button"; control.textContent=label;
+        control.onclick=()=>ask(action); return control;
+    };
+    const ask=async(action)=>{
+        const selected=field.value;
+        use.hidden=true; c.assistantResult=null;
+        if(c.dirty || c.operations) { answer.textContent="Wait for edits to save, then ask again."; return; }
+        if(!assistantAvailable) {
+            answer.textContent=action==="photo"
+                ? "Use a steady camera and diffuse light. Avoid glare, rotate the tube to show the whole field, and take another view if text wraps or overlaps."
+                : action==="explain"
+                ? (c.hints[selected]?.textContent || (c.checkReasons?.[selected]||[]).join(" ") || "No warning is recorded for this field. Check the crop and original photo.")
+                : "Cloud assistance is unavailable. Review and export still work.";
+            return;
+        }
+        if(action==="read" && !confirm(`Send the ${selected} field crop for this sample to xAI Grok? This image leaves the device.`)) return;
+        answer.textContent=action==="read"?"Sending this field crop to Grok…":"Asking Grok…";
+        const request_id=crypto.randomUUID().replaceAll("-","");
+        const startSession=sessionId, startVersion=c.version, startRevision=c.revision;
+        try {
+            const result=await api(`/sessions/${startSession}/samples/${c.id}/assistant`,post({action,field:selected,message:question.value,history:action==="followup"?(c.assistantHistory||[]):[],revision:startRevision,request_id,image_consent:action==="read"}));
+            if(sessionId!==startSession || c.version!==startVersion || c.revision!==startRevision || finishing || field.value!==selected) {
+                answer.textContent="Selection or review changed. Ask again."; return;
+            }
+            if(result.proposal) {
+                c.assistantResult={...result,request_id};
+                const value=result.proposal.value;
+                answer.textContent=value===null?"AI suggestion: unreadable. "+result.proposal.explanation:
+                    `AI suggestion for ${selected}: ${value}. ${result.proposal.explanation} Check the crop and original photo.`;
+                use.hidden=value===null || selected==="sample_id";
+            } else {
+                answer.textContent=result.answer||"No answer available.";
+                c.assistantHistory=[...(c.assistantHistory||[]),`Question: ${question.value.slice(0,300)} Answer: ${result.answer.slice(0,280)}`].slice(-4);
+            }
+        } catch(error) { answer.textContent=error.message; }
+    };
+    field.onchange=()=>{
+        c.assistantResult=null; c.assistantHistory=[]; use.hidden=true;
+        readButton.disabled=!assistantImageAvailable || field.value==="date_received";
+        answer.textContent=field.value==="date_received"
+            ? "Date Received is entered by the clerk; there is no label crop to send."
+            : `Selected ${field.selectedOptions[0].text} for this sample.`;
+    };
+    use.onclick=()=>{
+        const result=c.assistantResult;
+        if(!result || result.field!==field.value || result.revision!==c.revision || c.dirty) {
+            answer.textContent="Suggestion is stale. Ask again."; return;
+        }
+        c.inputs[result.field].value=result.proposal.value;
+        c.suggestion={request_id:result.request_id,field:result.field,revision:result.revision};
+        edited(c,true); use.hidden=true;
+        answer.textContent="AI suggestion entered for review. Check it and confirm the sample separately.";
+    };
+    const readButton=button("Ask Grok to read this field","read");
+    readButton.disabled=!assistantImageAvailable;
+    readButton.title=assistantImageAvailable?"Sends only this field crop after you confirm.":"Image assistance is unavailable.";
+    panel.append(heading,note,field,button("Explain this warning","explain"),
+        button("Help me get a clearer photo","photo"),readButton,
+        question,button("Ask question","followup"),answer,use);
+    c.el.append(panel);
 }
 function addCard(job) {
     const review=job.review;
@@ -408,7 +529,7 @@ function addCard(job) {
     if(!review?.fields || cards.has(job.record_id)) return;
     const c={
         id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, blankFields:review.blank_fields||[],
-        ocrValues:review.original_fields||review.fields, version:0,
+        ocrValues:review.original_fields||review.fields, version:0, revision:review.revision||0,
         dirty:false, saveError:false, operations:0,
         serverConfirmed:!!review.confirmed, tail:Promise.resolve(), timer:null
     };
@@ -563,6 +684,7 @@ function addCard(job) {
         attention.append(note);
     }
     c.el.append(c.moreDetails,originals);
+    addAssistant(c);
     if(Object.entries(review.ocr_candidates||{}).some(([key,choices])=>
         c.inputs[key] && !c.inputs[key].value && choices.length===1)) {
         const restore=document.createElement("button");
@@ -759,6 +881,8 @@ async function uploadPhotoFiles(files) {
         clearPhotos();
         say("Queued. You can photograph the next tube.");
         await refresh();
+        const review=$("#review-section");
+        if(review) review.scrollIntoView({behavior:"smooth", block:"start"});
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
     } finally {
@@ -819,7 +943,7 @@ async function uploadArchive(file) {
         uploading=false; $("#photos").value=""; renderBar();
     }
 }
-let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false;
+let cameraStream=null, autoPrevious=null, autoCaptured=null, autoStableSince=0, autoBusy=false, motorBusy=false;
 function cameraControls() {
     $("#capture-view").disabled=!cameraStream || photoQueue.length>=8 || uploading || finishing;
     $("#stop-camera").disabled=!cameraStream;
@@ -852,7 +976,7 @@ async function startCamera() {
         devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>
             choice.append(new Option(device.label||`Camera ${index+1}`,device.deviceId)));
         choice.value=selected;
-        $("#camera-status").textContent="Camera ready. Center the label and rotate for another view.";
+        $("#camera-status").textContent="Camera ready. A steady label in the frame is captured, then the motor asks for the next view.";
         cameraControls();
     } catch(error) {
         stopCamera();
@@ -892,10 +1016,36 @@ async function captureView(automatic=false) {
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.93));
     if(blob) addPhonePhotos([new File([blob],`view_${photoQueue.length+1}.jpg`,{type:"image/jpeg"})]);
     cameraControls();
-    if(automatic) $("#camera-status").textContent="View captured. Rotate the tube for the next view.";
+    if(automatic) {
+        if(photoQueue.length>=8) {
+            $("#camera-status").textContent="Eight views captured. Uploading this tube.";
+            uploadPhotoFiles(photoQueue.map(photo=>photo.file));
+        } else {
+            $("#camera-status").textContent="View captured. Turning to the next label.";
+            advanceTube();
+        }
+    }
+}
+async function advanceTube() {
+    motorBusy=true;
+    cameraControls();
+    try {
+        const result=await api("/live/motor", post({command:"n"}));
+        $("#camera-status").textContent=result.connected
+            ? "Next view ready. Hold the label steady for the next photo."
+            : "Photo saved. Turn the tube by hand for the next view. Set SCANNER_MOTOR_PORT to move the Arduino.";
+    } catch(error) {
+        $("#camera-status").textContent="Photo saved. Motor did not move: "+error.message;
+    } finally {
+        motorBusy=false;
+        autoCaptured=null;
+        autoPrevious=null;
+        autoStableSince=0;
+        cameraControls();
+    }
 }
 function checkAutoCapture() {
-    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || photoQueue.length>=8 || document.hidden) return;
+    if(!$("#auto-capture").checked || !cameraStream || uploading || finishing || autoBusy || motorBusy || photoQueue.length>=8 || document.hidden) return;
     const sample=cameraSample(); if(!sample) return;
     const detailed=labelDetail(sample), moving=autoPrevious && centerDifference(sample,autoPrevious)>3.5;
     autoPrevious=sample;
@@ -908,7 +1058,13 @@ function checkAutoCapture() {
     captureView(true).finally(()=>{ autoCaptured=sample; autoStableSince=0; autoBusy=false; });
 }
 $("#start-camera").onclick=startCamera;
-$("#stop-camera").onclick=stopCamera;
+$("#stop-camera").onclick=()=>{
+    stopCamera();
+    if(photoQueue.length && !uploading && !finishing) {
+        $("#camera-status").textContent="Uploading the views from this tube.";
+        uploadPhotoFiles(photoQueue.map(photo=>photo.file));
+    }
+};
 $("#camera-device").onchange=()=>{ if(cameraStream) startCamera(); };
 $("#capture-view").onclick=()=>{ autoCaptured=cameraSample(); captureView(); };
 $("#auto-capture").onchange=()=>{ autoPrevious=null; autoCaptured=null; autoStableSince=0; };
@@ -924,6 +1080,8 @@ async function initialize() {
     renderBar();
     try {
         const app=await api("/app"); bootId=app.boot_id;
+        assistantAvailable=!!app.assistant_available;
+        assistantImageAvailable=!!app.assistant_image_available;
         let saved=null;
         try { saved=JSON.parse(sessionStorage.getItem(STORAGE)||"null"); } catch(_) {}
         const unfinished=await api("/sessions");
