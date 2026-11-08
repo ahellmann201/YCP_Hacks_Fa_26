@@ -202,6 +202,11 @@ def field_image(record_id: str, field: str):
     evidence = review.get('evidence') or {}
     run = evidence.get('run_id', '')
     if not re.fullmatch(r'[0-9a-f]{32}', run):
+        try:
+            run = json.loads((folder/'ocr.json').read_text(encoding='utf-8')).get('run_id', '')
+        except (OSError, ValueError):
+            run = ''
+    if not re.fullmatch(r'[0-9a-f]{32}', run):
         raise HTTPException(404, 'Field crop unavailable.')
     key = 'barcode' if field == 'sample_id' else field
     root = folder/'analysis'/run
@@ -211,6 +216,11 @@ def field_image(record_id: str, field: str):
         number = evidence.get('sources', {}).get(key)
         if isinstance(number, int) and 1 <= number <= 8:
             path = root/f'photo_{number}_{key}.jpg'
+    if not path.is_file():
+        # The preview's selected-photo reference can be absent on older scans.
+        # Look for this exact field in every photo in the same analysis run.
+        path = next((root/f'photo_{number}_{key}.jpg' for number in range(1, 9)
+                     if (root/f'photo_{number}_{key}.jpg').is_file()), path)
     if not path.is_file():
         raise HTTPException(404, 'Field crop unavailable. Check original photos.')
     return FileResponse(path)
