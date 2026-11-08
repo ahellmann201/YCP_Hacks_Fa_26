@@ -10,6 +10,7 @@ class FieldReader:
         self.model = None
         self.failed = False
         self.warnings = []
+        self.last_confidence = None
 
     def load(self):
         root = Path(__file__).resolve().parent
@@ -20,6 +21,7 @@ class FieldReader:
         return module.Recognizer(root/'trained-model/english_finetuned_rec', threads=ocr_threads())
 
     def read(self, crop, field, label_type, fallback):
+        self.last_confidence = None
         # English improved serials/machines; dates and Large labels retain baseline OCR.
         eligible = label_type == 'small' and field in {'machine', 'serial_number'}
         if not eligible or os.environ.get('SCANNER_FIELD_MODEL', 'english') == 'rapidocr' or self.failed:
@@ -27,8 +29,10 @@ class FieldReader:
         try:
             if self.model is None:
                 self.model = self.load()
-            text = self.model(crop)['text'].strip()
+            result = self.model(crop)
+            text = result['text'].strip()
             if text:
+                self.last_confidence = result.get('confidence')
                 return text.upper() if field == 'serial_number' else text
         except Exception as error:
             self.failed = True

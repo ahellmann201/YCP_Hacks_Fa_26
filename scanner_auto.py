@@ -106,7 +106,7 @@ def valid_written_date(text):
     return re.sub(r"\s+", "", match.group())
 
 
-def read_text(engine, image, line=False):
+def read_text(engine, image, line=False, confidence=None):
     result = engine(
         image,
         use_det=not line,
@@ -114,6 +114,10 @@ def read_text(engine, image, line=False):
         use_rec=True,
     )
 
+    if confidence is not None:
+        scores = getattr(result, 'scores', None)
+        if scores is not None:
+            confidence.extend(float(score) for score in scores)
     if result.txts is None:
         return []
 
@@ -630,10 +634,15 @@ def process(job):
                         filename
                     )
 
+                    scores = []
                     recognized = clean(field_reader.read(
                         crop[..., ::-1].copy(), field, label_type,  # RGB crop -> BGR model input
-                        fallback=lambda: " ".join(read_text(engine, crop, line=True)),
+                        fallback=lambda: " ".join(read_text(engine, crop, line=True, confidence=scores)),
                     ))
+                    score = field_reader.last_confidence
+                    if score is None and scores:
+                        score = min(scores)
+                    entry.setdefault('field_scores', {})[field] = score
 
                     if field == "date_sampled":
                         values[field] = valid_written_date(

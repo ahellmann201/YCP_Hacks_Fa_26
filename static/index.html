@@ -18,6 +18,8 @@ body {
 .metric { flex:1 1 180px; padding:12px; background:#eef4ff; border-radius:8px; }
 .metric strong { display:block; font-size:24px; margin:5px 0; }
 .metric p { margin:0; }
+.focus-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; margin:14px 0; padding:12px; background:#f8fafc; border-radius:8px; }
+.field-crop { width:100%; max-height:160px; object-fit:contain; background:white; }
 h1,h2 { margin-top:0; }
 button,.button {
     display:inline-block; padding:13px 18px; margin:5px 5px 5px 0;
@@ -56,6 +58,7 @@ summary { cursor:pointer; padding:12px 0; }
     <p class="muted">Choose 1–8 photos of one tube, or one ZIP with a folder per tube.
         Maximum 100 tubes, 250 MB ZIP, 10 MB per photo. HEIC needs optional Pi support.</p>
     <a id="download" class="button" hidden>Download current CSV</a>
+    <button id="finish-export" type="button" hidden>Download CSV & finish session</button>
     <label style="display:block;margin:12px 0;font-size:15px;">
     <input id="include-unreviewed" type="checkbox">
     Include unreviewed samples in CSV
@@ -95,7 +98,7 @@ const names = [
 ];
 const cards = new Map();
 let session = null, sessionId = null, bootId = null;
-let uploading = false, refreshing = false, writes = 0, initialized = false;
+let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -173,14 +176,20 @@ function fieldStates(c) {
         }
         c.inputs[key].classList.toggle("bad",!!error);
         c.inputs[key].setAttribute("aria-invalid",error?"true":"false");
-        c.hints[key].textContent=error;
+        c.hints[key].textContent=error || (c.checkReasons?.[key]||[]).join(" ");
+        if(error && c.otherFields?.contains(c.inputs[key])) c.moreDetails.open=true;
     });
     c.el.classList.toggle("confirmed",c.check.checked && !c.dirty && !c.saveError);
 }
 function renderBar() {
-    $("#upload").disabled=uploading || !initialized;
+    cards.forEach(c=>{
+        Object.values(c.inputs).forEach(input=>input.disabled=finishing);
+        c.type.disabled=finishing;
+        c.check.disabled=finishing || c.operations>0;
+    });
+    $("#upload").disabled=uploading || finishing || !initialized;
     $("#upload").textContent=uploading?"Uploading…":"Upload samples";
-    const blocked=writes>0 || [...cards.values()].some(c=>c.saveError);
+    const blocked=finishing || writes>0 || [...cards.values()].some(c=>c.saveError || c.dirty);
     if(session) {
         const metrics=session.metrics||{};
         const average=metrics.average_processing_seconds;
@@ -201,6 +210,9 @@ function renderBar() {
         const exportCount=includeAll
             ? session.saved_count
             : session.confirmed_count;
+        $("#finish-export").hidden=!exportCount;
+        $("#finish-export").disabled=blocked || uploading || !!q.queued || !!q.processing || !!q.error ||
+            (!includeAll && (session.ready_count||0)>0);
         $("#download").hidden=!exportCount;
         $("#download").classList.toggle("disabled",blocked);
         $("#download").setAttribute("aria-disabled",blocked?"true":"false");
@@ -270,7 +282,7 @@ function addCard(job) {
     }
     if(!review?.fields || cards.has(job.record_id)) return;
     const c={
-        id:job.record_id, inputs:{}, hints:{}, version:0,
+        id:job.record_id, inputs:{}, hints:{}, checkReasons:review.field_checks||{}, version:0,
         dirty:false, saveError:false, operations:0,
         serverConfirmed:!!review.confirmed, tail:Promise.resolve(), timer:null
     };
@@ -301,6 +313,10 @@ function addCard(job) {
         c.el.append(elapsed);
     }
 
+    const originals=document.createElement("details");
+    const summary=document.createElement("summary");
+    summary.textContent="View full label and original photos";
+    originals.append(summary);
     if(review.evidence) {
         const link=document.createElement("a");
         link.href=`/samples/${c.id}/evidence`;
@@ -308,17 +324,12 @@ function addCard(job) {
         const image=document.createElement("img");
         image.src=link.href; image.className="preview"; image.loading="lazy";
         image.alt="Combined label view assembled from original field crops";
-        link.append(image); c.el.append(link);
+        link.append(image); originals.append(link);
         const caption=document.createElement("p");
         caption.className="muted";
         caption.textContent="Actual field crops from the uploaded photos. Tap to enlarge.";
-        c.el.append(caption);
+        originals.append(caption);
     }
-
-    const originals=document.createElement("details");
-    const summary=document.createElement("summary");
-    summary.textContent="View original photos";
-    originals.append(summary);
     for(let n=1;n<=(review.image_count||1);n++) {
         const image=document.createElement("img");
         image.src=`/samples/${c.id}/images/${n}`;
@@ -326,7 +337,18 @@ function addCard(job) {
         image.alt=`Original label photo ${n}`;
         originals.append(image);
     }
-    c.el.append(originals);
+
+    const attention=document.createElement("div");
+    const heading=document.createElement("h3"); heading.textContent="Check these fields";
+    attention.append(heading);
+    const explanation=document.createElement("p"); explanation.className="muted";
+    explanation.textContent="Flags are hints, not a guarantee. Open the other fields to check any reading.";
+    attention.append(explanation);
+    c.el.append(attention);
+    c.moreDetails=document.createElement("details");
+    const moreTitle=document.createElement("summary"); moreTitle.textContent="View / edit other fields";
+    c.otherFields=document.createElement("div");
+    c.moreDetails.append(moreTitle,c.otherFields);
 
     const typeLabel=document.createElement("label");
     typeLabel.textContent="Label type";
@@ -338,10 +360,12 @@ function addCard(job) {
             option.value=value; option.textContent=text; c.type.append(option);
         });
     c.type.value=review.label_type||"unknown";
-    typeLabel.append(c.type); c.el.append(typeLabel);
-    const grid=document.createElement("div"); grid.className="grid";
+    typeLabel.append(c.type);
+    (review.label_type==="unknown"?attention:c.otherFields).append(typeLabel);
+    let flaggedCount=0;
 
     names.forEach(([key,text])=>{
+        const row=document.createElement("div"); row.className="focus-row";
         const wrap=document.createElement("label");
         wrap.append(document.createTextNode(text));
         const input=document.createElement("input");
@@ -367,9 +391,32 @@ function addCard(job) {
             edited(c);
         };
         c.inputs[key]=input; c.hints[key]=hint;
-        wrap.append(input,hint); grid.append(wrap);
+        wrap.append(input,hint); row.append(wrap);
+        if(key!=="date_received") {
+            const link=document.createElement("a");
+            link.href=`/samples/${c.id}/fields/${key}`; link.target="_blank"; link.rel="noopener";
+            const image=document.createElement("img");
+            image.src=link.href; image.className="field-crop"; image.loading="lazy"; image.alt=`${text} label crop`;
+            image.onerror=()=>{
+                link.href=`/samples/${c.id}/images/1`;
+                link.replaceChildren(document.createTextNode("Crop unavailable — view original photo"));
+            };
+            link.append(image); row.append(link);
+        }
+        const unused=(key==="serial_number" && review.label_type==="large") ||
+            (key==="reference_lube" && review.label_type==="small");
+        const reasons=review.field_checks?.[key];
+        const flagged=!unused && key!=="date_received" &&
+            (Array.isArray(reasons)?reasons.length>0:true);
+        if(flagged) { attention.append(row); flaggedCount++; }
+        else c.otherFields.append(row);
     });
-    c.el.append(grid);
+    if(!flaggedCount) {
+        const note=document.createElement("p"); note.className="muted";
+        note.textContent="No fields flagged. Other fields and original photos are available below.";
+        attention.append(note);
+    }
+    c.el.append(c.moreDetails,originals);
 
     const label=document.createElement("label");
     label.className="confirm";
@@ -407,6 +454,7 @@ function addCard(job) {
         saveCard(c,c.check.checked);
     };
     c.type.onchange=()=>{
+        c.moreDetails.open=true;
         if(c.type.value==="small") c.inputs.reference_lube.value="";
         if(c.type.value==="large") c.inputs.serial_number.value="";
         edited(c);
@@ -445,10 +493,13 @@ function renderSession() {
     });
 }
 async function refresh() {
-    if(!sessionId || refreshing) return;
+    if(!sessionId || refreshing || finishing) return;
     refreshing=true;
+    const requestedSession=sessionId;
     try {
-        session=await api(`/sessions/${sessionId}`);
+        const updated=await api(`/sessions/${requestedSession}`);
+        if(sessionId!==requestedSession || finishing) return;
+        session=updated;
         $("#connection").textContent="";
         renderSession();
     } catch(error) {
@@ -465,13 +516,39 @@ async function ensureSession() {
 }
 $("#include-unreviewed").onchange=renderBar;
 
+$("#finish-export").onclick=async()=>{
+    if(finishing || uploading || writes || [...cards.values()].some(c=>c.dirty || c.saveError)) return;
+    if(!confirm("Download the current CSV and finish this session? This deletes this session’s uploaded photos and crop files. Your browser receives the CSV first; keep the downloaded file.")) return;
+    finishing=true; renderBar();
+    try {
+        const includeAll=$("#include-unreviewed").checked;
+        const response=await fetch(`/sessions/${sessionId}/csv?include_unreviewed=${includeAll}`,{cache:"no-store"});
+        if(!response.ok) throw new Error("CSV download failed; photos were not cleared.");
+        const hash=response.headers.get("X-Export-Hash");
+        if(!hash) throw new Error("Missing export receipt; photos were not cleared.");
+        const blob=await response.blob();
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement("a"); link.href=url; link.download=`samples-${sessionId}.csv`;
+        document.body.append(link); link.click(); link.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
+        const result=await api(`/sessions/${sessionId}/finish-export`,post({export_hash:hash,include_unreviewed:includeAll}));
+        cards.forEach(c=>clearTimeout(c.timer)); cards.clear(); $("#cards").replaceChildren();
+        session=null; sessionId=null;
+        try { sessionStorage.removeItem(STORAGE); } catch(_) {}
+        await ensureSession();
+        say(`CSV sent to your downloads. Cleared ${result.cleared_tubes} tubes’ photos and crops. Ready for a new session.`);
+    } catch(error) {
+        say(error.message+" Saved CSV field records are retained on the Pi.",true);
+    } finally { finishing=false; renderBar(); }
+};
+
 $("#upload").onclick=()=>{
-    if(uploading || !initialized) return;
+    if(uploading || finishing || !initialized) return;
     $("#photos").value=""; $("#photos").click();
 };
 $("#photos").onchange=async()=>{
     const files=Array.from($("#photos").files);
-    if(!files.length || uploading) return;
+    if(!files.length || uploading || finishing) return;
     const archives=files.filter(file=>file.name.toLowerCase().endsWith(".zip") ||
         ["application/zip","application/x-zip-compressed"].includes(file.type));
     if(archives.length) {

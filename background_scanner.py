@@ -1,4 +1,5 @@
 import json
+import hashlib
 import logging
 import re
 import subprocess
@@ -12,6 +13,22 @@ from uuid import uuid4
 from session_store import SessionStore, SessionError
 
 class QueueStore(SessionStore):
+    def finish_for_export(self, session_id, export_hash, include_unreviewed, render_csv):
+        with self.connection(write=True) as db:
+            self._session(db, session_id)
+            rows = db.execute('''SELECT s.record_id, s.review_json, j.state FROM session_samples s
+                JOIN scan_jobs j USING(record_id) WHERE s.session_id=? ORDER BY s.sequence''', (session_id,)).fetchall()
+            if not rows or any(row['state'] != 'done' for row in rows):
+                raise SessionError('Wait for all tubes to finish successfully before clearing this session.')
+            reviews = [json.loads(row['review_json']) for row in rows]
+            if not include_unreviewed and any(not r.get('confirmed') for r in reviews):
+                raise SessionError('Review all tubes or include unreviewed samples in the CSV before clearing.')
+            expected = hashlib.sha256(render_csv(reviews)).hexdigest()
+            if expected != export_hash:
+                raise SessionError('Session changed since the download. Download the current CSV again before clearing.')
+            db.execute('UPDATE sessions SET finished_at=COALESCE(finished_at, ?) WHERE id=?', (self.now(), session_id))
+            return [row['record_id'] for row in rows]
+
     def __init__(self, path):
         super().__init__(path)
         with self.connection() as db:
@@ -160,7 +177,7 @@ class QueueStore(SessionStore):
                     "review": {
                         key: review.get(key) for key in (
                             "fields", "label_type", "confirmed",
-                            "image_count", "evidence", "source_folder"
+                            "image_count", "evidence", "source_folder", "field_checks"
                         )
                     } if review else None,
                 })
@@ -341,6 +358,8 @@ class ScannerQueue:
             "image_count": len(names),
             "source_folder": sample.get('source_folder'),
         }
+        from review_checks import field_checks
+        review['field_checks'] = field_checks(fields, kind, result)
         try:
             from label_preview import build_preview
             review["evidence"] = build_preview(folder, run_id, result, kind)

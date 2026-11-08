@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import io
 import json
 import logging
@@ -95,6 +96,11 @@ class Review(BaseModel):
     confirmed: bool = False
     fields: Fields
 
+
+class FinishExport(BaseModel):
+    export_hash: str = Field(pattern=r'^[0-9a-f]{64}$')
+    include_unreviewed: bool = False
+
 @app.get("/")
 def home():
     return FileResponse(BASE / "static" / "index.html",
@@ -121,21 +127,40 @@ def retry_sample(session_id: str, record_id: str):
 @app.get("/sessions/{session_id}/csv")
 def download_csv(session_id: str, include_unreviewed: bool = False):
     session = STORE.get(session_id)
-    output = io.StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow([title for _, title in COLUMNS])
     reviews = (
         STORE.reviews(session_id)
         if include_unreviewed
         else STORE.confirmed_reviews(session_id)
     )
-    for review in reviews:
-        writer.writerow([review["fields"].get(key, "") for key, _ in COLUMNS])
-    return Response(output.getvalue().encode("utf-8-sig"), media_type="text/csv",
+    content = csv_bytes(reviews)
+    return Response(content, media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="samples-{session["id"]}.csv"',
             "Cache-Control": "no-store",
+            "X-Export-Hash": hashlib.sha256(content).hexdigest(),
         })
+
+
+def csv_bytes(reviews):
+    output = io.StringIO(newline='')
+    writer = csv.writer(output)
+    writer.writerow([title for _, title in COLUMNS])
+    for review in reviews:
+        writer.writerow([review['fields'].get(key, '') for key, _ in COLUMNS])
+    return output.getvalue().encode('utf-8-sig')
+
+
+@app.post('/sessions/{session_id}/finish-export')
+def finish_export(session_id: str, request: FinishExport):
+    from session_cleanup import clear_uploads
+    records = STORE.finish_for_export(session_id, request.export_hash,
+                                     request.include_unreviewed, csv_bytes)
+    try:
+        count = clear_uploads(UPLOADS, records)
+    except (OSError, ValueError):
+        logging.exception('Could not clear finished session uploads')
+        raise HTTPException(500, 'CSV is retained. Some photos could not be cleared; retry finishing this session.')
+    return {'cleared_tubes':count}
 
 @app.get("/samples/{record_id}/images/{number}")
 def original_image(record_id: str, number: int):
@@ -164,6 +189,30 @@ def combined_image(record_id: str):
     path = folder / "analysis" / run_id / "combined.jpg"
     if not path.is_file():
         raise HTTPException(404, "Combined image unavailable.")
+    return FileResponse(path)
+
+
+@app.get('/samples/{record_id}/fields/{field}')
+def field_image(record_id: str, field: str):
+    if field not in {'sample_id', 'machine', 'date_sampled', 'component', 'serial_number', 'reference_lube'}:
+        raise HTTPException(404, 'Field crop unavailable.')
+    folder = folder_for(record_id)
+    membership = STORE.sample(record_id)
+    review = (membership or {}).get('review') or {}
+    evidence = review.get('evidence') or {}
+    run = evidence.get('run_id', '')
+    if not re.fullmatch(r'[0-9a-f]{32}', run):
+        raise HTTPException(404, 'Field crop unavailable.')
+    key = 'barcode' if field == 'sample_id' else field
+    root = folder/'analysis'/run
+    path = root/f'field_{key}.jpg'
+    if not path.is_file():
+        # Older records already have the individual text crops.
+        number = evidence.get('sources', {}).get(key)
+        if isinstance(number, int) and 1 <= number <= 8:
+            path = root/f'photo_{number}_{key}.jpg'
+    if not path.is_file():
+        raise HTTPException(404, 'Field crop unavailable. Check original photos.')
     return FileResponse(path)
 
 @app.post("/samples/{record_id}/review")

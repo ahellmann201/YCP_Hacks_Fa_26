@@ -103,6 +103,8 @@ def build_preview(folder, run_id, result, kind):
             draw.text((left+10, top+50), "Check original photos",
                       fill="#a02020", font=font)
         else:
+            # Save the selected actual field crop for the focused review row.
+            best.save(root / f"field_{field}.jpg", quality=90)
             best.thumbnail((right-left-20, bottom-top-50))
             sheet.paste(best, (left+10, top+45))
             best.close()
