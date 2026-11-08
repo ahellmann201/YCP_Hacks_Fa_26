@@ -8,10 +8,10 @@ In the Pi terminal (SSH or VS Code Remote SSH):
 
 ```bash
 cd ~/sample-scanner
-bash scripts/start_demo.sh
+bash start-scanner.sh
 ```
 
-This starts the app with **three OCR threads** and prints its addresses. Keep the terminal open. The equivalent direct command is:
+`start-scanner.sh` stays next to this README. It starts the app with **three OCR threads** and prints its addresses. Keep the terminal open. The equivalent direct command is:
 
 ```bash
 SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
@@ -41,7 +41,7 @@ Limits: **100 tubes per ZIP**, **250 MiB archive**, **512 MiB uncompressed photo
 
 ## Run on the Dell
 
-Use this when the demo should run on the laptop instead of the Pi. It is the same site and the same OCR. The laptop keeps its own `uploads/` folder and `scanner.sqlite3`, so Pi sessions do not appear here, and starting this server does not clear the Pi. `scripts/start_demo.sh` is the Pi launcher; on Windows use the commands below. Do not copy this Windows `.venv-ocr` onto the Pi.
+Use this when the demo should run on the laptop instead of the Pi. It is the same site and the same OCR. The laptop keeps its own `uploads/` folder and `scanner.sqlite3`, so Pi sessions do not appear here, and starting this server does not clear the Pi. On the Pi, run `start-scanner.sh`. On the Dell, after the one-time setup below, double-click `Start Scanner.bat` in this folder. Both launchers stay next to this README. Do not copy this Windows `.venv-ocr` onto the Pi.
 
 Page behavior matches the Pi demo above: one tube or one ZIP, review, CSV, and **Ctrl+C** to stop. Starting the server empties this checkout’s `uploads/`. Download a CSV first if those photos are still needed. The RTX 3060 is for training. This server reads labels on the CPU.
 
@@ -58,15 +58,13 @@ py -3 -m venv .venv-ocr
 
 `prepare_models.py` needs internet once so RapidOCR can cache its models. `--check` then confirms those models plus the included English recognizer with networking blocked. The scan itself stays offline after that.
 
-**Each later start:**
+**Each later start:** double-click `Start Scanner.bat`. Keep that window open. The equivalent command is:
 
 ```powershell
 cd C:\Hackathons\YCP_Hack_Fa_26\YCP_Hacks_Fa_26
 $env:SCANNER_OCR_THREADS = "3"
 .\.venv-ocr\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
-
-Keep that window open.
 
 1. **On the laptop:** open `http://127.0.0.1:8000`. Do not browse to `0.0.0.0`.
 2. **On the phone:** the phone has to reach the laptop. Run `ipconfig` and use the laptop address on the network the phone is actually joined to, for example `http://192.168.50.1:8000` only when the phone is on that same Ethernet link. Campus Wi-Fi cannot see the direct Dell–Pi address `192.168.50.1`. A phone hotspot works when the laptop is connected to that hotspot. **Take photo** uses the phone camera against whichever address opened the page.
@@ -104,7 +102,7 @@ This is a normal restart, **not a reinstall**. Keep the existing environment and
 
    Use the exact scanned SSID. It has appeared as `AndrewsiPhone` and previously with an apostrophe. Event Wi-Fi may isolate devices. Internet is needed for installation/updates, not a prepared offline scan.
 
-5. Run `cd ~/sample-scanner`, then `bash scripts/start_demo.sh`. Open the hotspot-side Pi address on the phone and choose resume/new.
+5. Run `cd ~/sample-scanner`, then `bash start-scanner.sh`. Open the hotspot-side Pi address on the phone and choose resume/new.
 
 ### Direct Ethernet recovery
 
@@ -158,7 +156,7 @@ The first command can download the selected RapidOCR PP-OCRv5 mobile models. The
 
 ```bash
 .venv-ocr/bin/python -m py_compile main.py scanner_auto.py background_scanner.py
-bash scripts/start_demo.sh
+bash start-scanner.sh
 ```
 
 Before presenting, upload one Small and one Large label, inspect crops/originals, correct fields and open the CSV. Test HEIC import on the actual Pi if your ZIP uses it. Syntax/model loading checks do not prove recognition accuracy.
@@ -174,7 +172,7 @@ git branch --show-current
 git fetch origin
 ```
 
-For a **clean checkout already on `training`**, stop the server, run `git pull --ff-only`, then `bash scripts/start_demo.sh`. If there are local edits or individually restored files, save/commit those before switching branches or pulling. Do not hard-reset or delete `uploads/`/`scanner.sqlite3` as an update step. Pushing source code does not back up sample data.
+For a **clean checkout already on `training`**, stop the server, run `git pull --ff-only`, then `bash start-scanner.sh`. If there are local edits or individually restored files, save/commit those before switching branches or pulling. Do not hard-reset or delete `uploads/`/`scanner.sqlite3` as an update step. Pushing source code does not back up sample data.
 
 To synchronize an older mixed Pi checkout in place, stop its server and follow [the backed-up Pi sync procedure](docs/PI_CLEAN_CHECKOUT.md#sync-the-current-pi-folder-in-place). This aligns source to `origin/training`; it does not replay old application changes with a Git rebase.
 
@@ -225,12 +223,13 @@ Valid full dates accept `.`, `-` or `/` and display/export as **MM/DD/YYYY**. Tw
 
 | Location | Purpose |
 |---|---|
+| `README.md`, `start-scanner.sh`, `Start Scanner.bat` | This guide and the two launchers. They stay in the project root. |
 | `main.py`, `static/` | FastAPI entry point, MRG logo, and phone/browser interface |
 | `scanner/queue/` | Background scan queue |
 | `scanner/io/` | Sessions, upload cleanup, and ZIP intake |
 | `scanner/vision/` | Label alignment, crops, and circled component marks |
 | `scanner/reading/` | OCR settings, field text, and the photo-reading pipeline |
-| `scripts/start_demo.sh` | Demo launcher; defaults to three OCR threads |
+| `scripts/start_demo.sh` | Pi startup details used by `start-scanner.sh`; defaults to three OCR threads |
 | `tools/` | Model preparation, barcode/handwriting diagnostics, throughput benchmark |
 | `tests/` | App regression tests with disposable data |
 | `docs/` | ZIP, metrics, review/cleanup and thread guides |
