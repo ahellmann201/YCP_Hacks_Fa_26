@@ -1,5 +1,23 @@
 # Clean Pi source checkout without losing the existing environment/data
 
+## Sync the current Pi folder in place
+
+Use this when you want the existing folder aligned to `training`, rather than creating another checkout. Stop the app with **Ctrl+C**, then run in the actual app folder (`~/sample-scanner` or `~/sample-scanner-demo`):
+
+```bash
+cd ~/sample-scanner
+git fetch origin &&
+git show origin/training:scripts/sync_pi.sh > /tmp/sample-scanner-sync.sh &&
+bash /tmp/sample-scanner-sync.sh --cached &&
+bash scripts/start_demo.sh
+```
+
+The helper first creates backup branches for current commits and any existing local `training` branch. It stashes tracked/untracked source changes, explicitly excluding uploads, `.venv*`, SQLite files and sidecars, `.env` files, model/cache folders, backups and benchmark results. It then switches/resets the local **training** branch to the fetched `origin/training` and sets its upstream. Obsolete untracked code is preserved in the stash rather than left mixed into the new layout. Do not automatically reapply the old stash; that would mix old code back into the update.
+
+It stops if protected runtime files are Git-tracked or a normal merge/rebase is in progress. It validates the repository remote and does not run `git clean` or delete runtime data. This is a code synchronization operation, not a history-replaying `git rebase`. The code backup can be inspected with `git stash list` and `git branch --list 'backup/pi-*'`. Backup stashes/branches are local to that Pi, not automatically pushed. The procedure was tested in an isolated Git repository with staged edits, untracked conflicting code, photos, SQLite/WAL, environment and result files; it has not been executed through the user's SSH login.
+
+## Alternative: keep the old source tree and create a new one
+
 The screenshot with many `M`, `A` and `U` markers is consistent with individual `training` files being restored onto an older branch. That updates selected app files but does not switch branches or remove old/untracked root files. The organized layout is committed on `training`; runtime helpers intentionally remain next to `main.py`, while tests, tools, guides and legacy code have their own directories.
 
 Use a separate clean checkout to avoid resetting or deleting that mixed working tree. These instructions assume the old folder is `/home/hacks/sample-scanner`, with an existing `.venv-ocr`, `uploads/` and `scanner.sqlite3`.

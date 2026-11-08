@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+WRAPPER_DIR=Path(__file__).resolve().parent
 
 p=argparse.ArgumentParser(add_help=False);p.add_argument('--repo',type=Path,required=True)
 a,remaining=p.parse_known_args();repo=a.repo.resolve()
@@ -45,6 +46,9 @@ def freeze_norm(layer,inputs):layer.eval()
 
 if __name__=='__main__':
     transforms.MildTubeAugment=MildTubeAugment
+    sys.path.insert(0,str(WRAPPER_DIR))
+    from marker_augmentation import MarkerStrokeAugment
+    transforms.MarkerStrokeAugment=MarkerStrokeAugment
     config,device,logger,writer=train.program.preprocess(is_train=True)
     partial=config['Global'].get('train_last_block',False)
     original=train.build_model

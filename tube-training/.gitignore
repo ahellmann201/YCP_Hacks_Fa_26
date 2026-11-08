@@ -20,6 +20,9 @@ model-export/
 model-comparison-report*/
 model-comparison-cache/
 experiments*/
+marker-training*/
+marker-holdout*/
+sharpie-review/
 cleaned-training*/
 crop-cleanup/
 en_PP-OCRv5_mobile_rec_pretrained.pdparams
