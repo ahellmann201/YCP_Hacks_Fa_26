@@ -2,6 +2,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+if [[ -z "${SCANNER_ACCESS_PASSWORD:-}" ]]; then
+    echo "Set SCANNER_ACCESS_PASSWORD before starting. See README.md."
+    exit 1
+fi
 if [[ ! -x .venv-ocr/bin/python ]]; then
     echo "Missing .venv-ocr. Follow the fresh-install section in README.md."
     exit 1
@@ -12,13 +16,7 @@ case "$SCANNER_OCR_THREADS" in
     *) echo "SCANNER_OCR_THREADS must be 1, 2, 3 or 4"; exit 1 ;;
 esac
 echo "Starting the demo with $SCANNER_OCR_THREADS OCR threads."
-echo "Open one of these addresses from a device on the same network:"
-for address in $(hostname -I); do
-    if [[ "$address" == *:* ]]; then
-        echo "  http://[$address]:${PORT:-8000}"
-    else
-        echo "  http://$address:${PORT:-8000}"
-    fi
-done
+echo "Local address: http://127.0.0.1:${PORT:-8000}"
+echo "For phones or other computers, use the configured HTTPS reverse-proxy address."
 echo "Keep this terminal open. Press Ctrl+C to stop; unfinished work is retained."
-exec .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --port "${PORT:-8000}"
+exec .venv-ocr/bin/python -m uvicorn main:app --host "${SCANNER_BIND:-127.0.0.1}" --port "${PORT:-8000}"

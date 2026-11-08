@@ -1,6 +1,6 @@
 # Offline Sample Scanner
 
-Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. Current demo updates are on **`training`**.
+Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. Optional Grok review help is described in [ASSISTANT.md](ASSISTANT.md).
 
 ## Quick demo: Pi already running
 
@@ -11,13 +11,13 @@ cd ~/sample-scanner
 bash scripts/start_demo.sh
 ```
 
-This starts the app with **three OCR threads** and prints its addresses. Keep the terminal open. The equivalent direct command is:
+Set `SCANNER_ACCESS_PASSWORD` first (see [assistant and authentication setup](ASSISTANT.md)). This starts the app with **three OCR threads**. Keep the terminal open. The equivalent direct command is:
 
 ```bash
-SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+SCANNER_OCR_THREADS=3 .venv-ocr/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-1. **Open the page:** visit `http://PI_ADDRESS:8000` from the phone/Dell. Use `hostname -I` to find current addresses. The hotspot previously assigned `172.20.10.2`; configured direct Dell Ethernet uses `192.168.50.2`. Use a network the viewing device can reach. **Do not browse to `0.0.0.0`.**
+1. **Open the page:** use `http://127.0.0.1:8000` on the Pi, or the configured HTTPS reverse-proxy address from a phone/Dell. Log in as `clerk` with `SCANNER_ACCESS_PASSWORD`. The hotspot previously assigned `172.20.10.2`; configured direct Dell Ethernet uses `192.168.50.2`, but these are not direct HTTP login addresses under the new default configuration.
 2. **Choose a session:** select **Resume selected session** or **Start new session** if unfinished work exists. Saved edits survive browser/server restarts. Starting new preserves older work.
 3. **Upload samples:** select 1–8 JPG/PNG/WebP photos of **one tube**, or **one ZIP** containing a folder per tube. For a short demo, use 3–5 clear tubes; use 10–20 for a longer batch. Do not mix ZIPs and loose photos.
 4. **Review as results arrive:** ready cards appear above the processing list. Flagged fields have matching crops; other fields and all originals are expandable. Correct OCR values and select **All good — include in CSV**. Confirmed cards disappear. Populated/high-confidence fields can still be wrong.
@@ -71,7 +71,7 @@ This is a normal restart, **not a reinstall**. Keep the existing environment and
 
    Use the exact scanned SSID. It has appeared as `AndrewsiPhone` and previously with an apostrophe. Event Wi-Fi may isolate devices. Internet is needed for installation/updates, not a prepared offline scan.
 
-5. Run `cd ~/sample-scanner`, then `bash scripts/start_demo.sh`. Open the hotspot-side Pi address on the phone and choose resume/new.
+5. Run `cd ~/sample-scanner`, then `bash scripts/start_demo.sh`. Open the configured HTTPS proxy address on the phone and choose resume/new.
 
 ### Direct Ethernet recovery
 
@@ -151,7 +151,7 @@ If VS Code still shows the old root files and many `M`/`A`/`U` markers, use the 
 
 | Symptom | Action |
 |---|---|
-| Phone cannot open the page | Keep the server terminal open. Use `http://` and the current reachable Pi IP; check hotspot connectivity. |
+| Phone cannot open the page | Keep the server and HTTPS proxy running. Check the proxy address, certificate, allowed origin, and hotspot connectivity. |
 | SSH times out | Check Ethernet link and the `.50.1`/`.50.2` adapter settings above; use the Pi display for recovery. |
 | GitHub hostname cannot resolve | Reconnect Pi Wi-Fi/default route or DNS. Prepared OCR does not need GitHub. |
 | Old controls remain | Refresh/reopen the page after HTML updates. Restart after Python updates. |
@@ -189,6 +189,8 @@ Valid full dates accept `.`, `-` or `/` and display/export as **MM/DD/YYYY**. Tw
 | Reference Lube | Ref Lube | Blank |
 
 ## File layout and developer checks
+
+For optional Grok review help, authentication, privacy, and Pi deployment, see [Grok assistant setup](ASSISTANT.md).
 
 | Location | Purpose |
 |---|---|
