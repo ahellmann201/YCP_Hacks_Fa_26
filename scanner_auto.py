@@ -436,6 +436,8 @@ def decode_barcodes(pixels):
 
 
 def process(job):
+    from field_recognizer import FieldReader
+    field_reader = FieldReader()
     import cv2
     import numpy as np
 
@@ -627,15 +629,10 @@ def process(job):
                         filename
                     )
 
-                    recognized = clean(
-                        " ".join(
-                            read_text(
-                                engine,
-                                crop,
-                                line=True,
-                            )
-                        )
-                    )
+                    recognized = clean(field_reader.read(
+                        crop[..., ::-1].copy(), field, label_type,  # RGB crop -> BGR model input
+                        fallback=lambda: " ".join(read_text(engine, crop, line=True)),
+                    ))
 
                     if field == "date_sampled":
                         values[field] = valid_written_date(
@@ -720,6 +717,7 @@ def process(job):
                 "show different tubes. Start a separate upload per tube."
         }
 
+    warnings.extend(field_reader.warnings)
     if len(detected_types) > 1:
         return {
             "error":

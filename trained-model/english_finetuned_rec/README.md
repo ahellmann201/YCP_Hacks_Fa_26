@@ -10,7 +10,9 @@ This offline ONNX model is an English PP-OCRv5 mobile recognizer fine-tuned for 
 
 Only four Small-label tubes are represented in validation. The set was repeatedly used to choose checkpoints, and some training labels were assistant-transcribed. This is a candidate for further testing, not evidence of general or Large-label accuracy. Dates remain problematic. See [training experiment details](../../tube-training/TRAINING_EXPERIMENTS.md).
 
-Conversion passed ONNX graph checking. All nine CPU Paddle predictions match ONNX and the standalone helper, with maximum absolute output difference 0.0000319481. Model size is 7,850,705 bytes. Pi latency and memory have not yet been measured for this candidate, and the app's default recognizer is unchanged.
+Conversion passed ONNX graph checking. All nine CPU Paddle predictions match ONNX and the standalone helper, with maximum absolute output difference 0.0000319481. Model size is 7,850,705 bytes. The user's Pi benchmark measured 1.25s loading, 0.66s first field, 0.63s warm median, and 96.7 MiB peak process memory, versus 1.60s / 0.81s / 0.70s / 114.2 MiB for the earlier trained multilingual model. These are standalone field-recognizer measurements.
+
+`scanner_auto.py` now uses this candidate for Small-label machine and serial-number crops through `field_recognizer.py`. Dates, Large labels, full-photo label detection, and circled selections retain the original OCR. RGB photo crops are converted to the recognizer's BGR input. The candidate is loaded once per tube worker when first needed; it is not kept resident between tubes. Missing/failed model loading or empty output falls back to original OCR. To compare the original pipeline on identical images, start the server with `SCANNER_FIELD_MODEL=rapidocr`; omit the setting to enable the candidate routing. Measure full per-tube latency and memory after integration: the worker still contains the original OCR model as well as this candidate.
 
 From the repository root on the Pi, test an existing **field crop**:
 
