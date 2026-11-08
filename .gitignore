@@ -17,3 +17,6 @@ scanner.sqlite3*
 
 # Local code backups
 .scanner-backups/
+
+# Local hardware benchmark output
+/benchmark-results.json

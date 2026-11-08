@@ -67,3 +67,15 @@ The converted [English fine-tuned candidate](../trained-model/english_finetuned_
 This small validation set is repeatedly used to choose checkpoints. It contains no Large-label validation examples and is not an independent final test. More epochs or better development scores alone do not establish better performance on new tubes or writers.
 
 Keep the original model available. Convert a selected run using `convert_recognizer.py`, which copies the dictionary from that run's configuration, and verify CPU Paddle/ONNX parity with `verify_onnx_conversion.py`. Measure latency and memory on the Pi before changing the app's default recognizer.
+
+## Pi speed and memory benchmark
+
+From the repository root, run:
+
+```bash
+.venv-ocr/bin/python tube-training/benchmark_recognizers.py
+```
+
+This automatically selects up to three saved field crops under `uploads/` and compares the previous trained multilingual model with the new English candidate. Each model gets a fresh process with one CPU thread. It reports model loading, first recognition, warm median/p95 latency, and peak process memory, saving `benchmark-results.json`. Close the scanner server first to measure standalone resource use. Keep both runs under the same background load and power/temperature conditions.
+
+To choose a crop or make a longer run, add `--image "PATH/TO/CROP.jpg" --repeats 10`. Repeat `--image` for more crops. Warm timings include preprocessing and text decoding but exclude reading photos, barcode detection, automatic cropping, and the web app. Peak memory includes the Python interpreter, libraries, loaded images, and model; it is not the full running scanner's memory requirement. Fresh processes do not clear the filesystem cache. Windows measurements are supported for checking the tool but do not predict Pi performance.
