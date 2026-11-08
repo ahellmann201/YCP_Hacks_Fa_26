@@ -6,6 +6,8 @@ We built the system by combining a 3D-printed geared holder, an Arduino UNO Q mo
 
 [Windows setup](#set-up-on-a-new-windows-laptop) · [Phone setup](#connect-an-iphone-over-local-https) · [Architecture](#architecture) · [Grok assistant](#how-the-xai-grok-assistant-helps) · [Hardware files](hardware/final%20files/) · [Detailed assistant configuration](ASSISTANT.md)
 
+This project addresses sample-label intake and transcription for the MRG Laboratories challenge. It does not analyze lubricant chemistry or determine equipment condition.
+
 ## What the prototype does
 
 - Accepts browser camera captures, 1–8 uploaded photos of one tube, or a ZIP with one folder per tube.
@@ -14,14 +16,14 @@ We built the system by combining a 3D-printed geared holder, an Arduino UNO Q mo
 - Lets an operator correct readings, request optional Grok assistance, confirm samples, and export CSV records.
 - Runs the server on a laptop or a prepared Raspberry Pi. The current USB motor setup was exercised with a Windows laptop and UNO Q.
 
-**Current validation:** the merged version passed 71 Python tests and the JavaScript capture checks. Motor movement and settling were tested, and smooth physical movement was confirmed. A complete iPhone automatic scan still needs a real end-to-end check. Tests do not establish OCR accuracy or guarantee that gears never slip.
+**Current validation:** the earlier merged version passed 71 Python tests and the JavaScript capture checks. Motor movement and settling were tested, and smooth physical movement was confirmed. A complete iPhone automatic scan still needs a real end-to-end check. Tests do not establish OCR accuracy or guarantee that gears never slip.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
     Camera[Browser camera or uploaded photos] --> Web[Browser interface]
-    Web -->|Authenticated local HTTP or trusted HTTPS| API[FastAPI server]
+    Web -->|Local HTTP or trusted HTTPS| API[FastAPI server]
     API --> Capture[Automatic capture coordinator]
     Capture -->|USB ADB forwarding: port 8765| Agent[Python motor agent on UNO Q Linux]
     Agent -->|Arduino Bridge RPC| Firmware[UNO Q automatic motor sketch]
@@ -90,7 +92,7 @@ $env:XAI_API_KEY = "YOUR_PRIVATE_XAI_API_KEY"
 $env:ASSISTANT_IMAGE_ENABLED = "true"
 ```
 
-Keep the key private. Text assistance sends selected field context to xAI; the image action additionally sends the selected crop after confirmation. The server supplies no browsing or code-execution tools to the assistant. Model configuration, request limits, retention, authentication, and evaluation instructions are in [ASSISTANT.md](ASSISTANT.md). A live provider call requires internet and an appropriately configured xAI account; automated tests use mocks.
+The latest demo server on `main` does not enforce the earlier shared-password middleware. Use a trusted demo network; before exposing the assistant to other users, restore access control or place it behind an authenticated proxy. Keep the key private. Text assistance sends selected field context to xAI; the image action additionally sends the selected crop after confirmation. The server supplies no browsing or code-execution tools to the assistant. Model configuration, request limits, retention, and evaluation instructions are in [ASSISTANT.md](ASSISTANT.md); its authentication description predates the latest open-demo changes. A live provider call requires internet and an appropriately configured xAI account; automated tests use mocks.
 
 ## Set up on a new Windows laptop
 
@@ -116,13 +118,7 @@ Start the server:
 .\.venv-ocr\Scripts\python.exe scripts\start_automatic_scanner.py
 ```
 
-Leave the terminal open. On a fresh checkout without HTTPS configuration, open **http://127.0.0.1:8000** on this laptop. The launcher generates a private login file. Display it locally in a second project terminal:
-
-```powershell
-Get-Content .env.automatic-scanner
-```
-
-Use its username/password to sign in. Choose or create a session, upload one tube's photos, and check the OCR results before adding motor or phone setup. GitHub does not contain previous sample photos, session databases, passwords, or private certificates.
+Leave the terminal open. On a fresh checkout without HTTPS configuration, open **http://127.0.0.1:8000** on this laptop. The launcher still generates `.env.automatic-scanner`, but the current demo server does not enforce its login. Do not treat that file as access protection. Choose or create a session, upload one tube's photos, and check the OCR results before adding motor or phone setup. GitHub does not contain previous sample photos, session databases, passwords, or private certificates.
 
 ### Connect the existing UNO Q
 
@@ -163,14 +159,14 @@ In two normal project terminals, leave these running:
 ```
 
 ```powershell
-# Terminal 2: authenticated HTTPS scanner
+# Terminal 2: HTTPS scanner
 .\.venv-ocr\Scripts\python.exe scripts\start_automatic_scanner.py
 ```
 
 1. Open `http://YOUR_LAPTOP_IP:8081` in Safari and download the profile.
 2. Open **Settings → General → VPN & Device Management**, select the downloaded profile, and install it.
 3. Enable the scanner certificate under **General → About → Certificate Trust Settings**.
-4. Open `https://YOUR_LAPTOP_IP:8443` and sign in using the new laptop's login.
+4. Open `https://YOUR_LAPTOP_IP:8443`. The current demo server does not require a login.
 5. Choose a session, select three-tube mode, allow camera access, and check the live preview before scanning.
 6. Start with **Original** motor speed. Keep Safari visible and the phone unlocked; verify that three samples with eight views each arrive for review.
 
@@ -191,10 +187,10 @@ python3 -m venv .venv-ocr
 .venv-ocr/bin/python tools/prepare_models.py
 .venv-ocr/bin/python tools/prepare_models.py --check
 export SCANNER_ACCESS_PASSWORD='REPLACE_WITH_A_LONG_RANDOM_PASSWORD'
-bash start-scanner.sh
+.venv-ocr/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-The server binds to loopback by default. Use it locally at `http://127.0.0.1:8000`, or configure trusted HTTPS for remote devices as described in [ASSISTANT.md](ASSISTANT.md). Keep one server worker. GPU training is a separate environment documented in [tube-training/README.md](tube-training/README.md).
+This explicit command binds to loopback. The current `start-scanner.sh` demo launcher instead binds to all interfaces. Use it locally at `http://127.0.0.1:8000`, or configure trusted HTTPS for remote devices as described in [ASSISTANT.md](ASSISTANT.md). Keep one server worker. GPU training is a separate environment documented in [tube-training/README.md](tube-training/README.md).
 
 ## Review, export, and update
 

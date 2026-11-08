@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import List, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,7 +24,7 @@ from scanner.io.session_store import SessionError
 from scanner.io.zip_import import prepare_archive, ImportError as BatchImportError
 from scanner.reading.sample_dates import normalize_sample_date, sampled_date_issue
 from scanner.io.session_cleanup import empty_uploads
-from access_control import check_access
+from scanner.io.motor_link import send_command
 from grok_assistant import AssistantRequest, AssistantService, FIELDS
 from automatic_capture import AutomaticCapture, make_router as make_capture_router
 
@@ -55,18 +55,6 @@ async def lifespan(app):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
-
-@app.middleware("http")
-async def clerk_access(request: Request, call_next):
-    try:
-        check_access(request)
-        if request.method == "POST" and request.url.path.endswith("/assistant"):
-            size = request.headers.get("content-length", "")
-            if not size.isdigit() or int(size) > 16_384:
-                raise HTTPException(413, "Assistant request is too large.")
-    except HTTPException as error:
-        return JSONResponse({"detail": error.detail}, status_code=error.status_code, headers=error.headers)
-    return await call_next(request)
 TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 COLUMNS = [
     ("sample_id", "Sample ID"), ("date_sampled", "Date Sampled"),
@@ -98,12 +86,6 @@ def folder_for(record_id):
     if not (folder / "sample.json").is_file():
         raise HTTPException(404, "Sample not found.")
     return folder
-
-def member_folder(record_id):
-    membership = STORE.sample(record_id)
-    if not membership or not membership.get("session_id"):
-        raise HTTPException(404, "Sample not found.")
-    return folder_for(record_id), membership
 
 def valid_received(value):
     try:
@@ -151,9 +133,22 @@ def home():
 @app.get("/app")
 def app_info():
     import os
-    enabled = os.getenv("ASSISTANT_ENABLED", "").lower() in {"1","true","yes"} and bool(os.getenv("XAI_API_KEY"))
+    enabled = os.getenv("ASSISTANT_ENABLED", "").lower() in {"1", "true", "yes"} and bool(os.getenv("XAI_API_KEY"))
     return {"boot_id": BOOT_ID, "assistant_available": enabled,
-            "assistant_image_available": enabled and os.getenv("ASSISTANT_IMAGE_ENABLED", "").lower() in {"1","true","yes"}}
+            "assistant_image_available": enabled and os.getenv("ASSISTANT_IMAGE_ENABLED", "").lower() in {"1", "true", "yes"},
+            "motor_available": bool(os.getenv("SCANNER_MOTOR_PORT", "").strip())}
+
+
+class MotorCommand(BaseModel):
+    command: str = Field(pattern=r"^[jmtnsr123JMTNSR?]$")
+
+
+@app.post("/live/motor")
+def live_motor(body: MotorCommand):
+    try:
+        return send_command(body.command, wait_done=body.command.lower() in {"n", "j", "m", "t"})
+    except Exception as error:
+        raise HTTPException(503, f"Motor link failed: {str(error)[:160]}")
 
 @app.post("/sessions")
 def create_session(value: NewSession):
@@ -196,12 +191,8 @@ def csv_bytes(reviews):
     writer = csv.writer(output)
     writer.writerow([title for _, title in COLUMNS])
     for review in reviews:
-        writer.writerow([csv_safe(review['fields'].get(key, '')) for key, _ in COLUMNS])
+        writer.writerow([review['fields'].get(key, '') for key, _ in COLUMNS])
     return output.getvalue().encode('utf-8-sig')
-
-def csv_safe(value):
-    value = str(value or '')
-    return "'" + value if value.lstrip().startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n')) else value
 
 
 @app.post('/sessions/{session_id}/finish-export')
@@ -218,7 +209,7 @@ def finish_export(session_id: str, request: FinishExport):
 
 @app.get("/samples/{record_id}/images/{number}")
 def original_image(record_id: str, number: int):
-    folder, _ = member_folder(record_id)
+    folder = folder_for(record_id)
     sample = json.loads((folder / "sample.json").read_text(encoding="utf-8"))
     images = sample["images"]
     if not 1 <= number <= len(images):
@@ -233,7 +224,8 @@ def original_image(record_id: str, number: int):
 
 @app.get("/samples/{record_id}/evidence")
 def combined_image(record_id: str):
-    folder, membership = member_folder(record_id)
+    folder = folder_for(record_id)
+    membership = STORE.sample(record_id)
     review = membership["review"] if membership else None
     evidence = (review or {}).get("evidence") or {}
     run_id = evidence.get("run_id", "")
@@ -245,14 +237,11 @@ def combined_image(record_id: str):
     return FileResponse(path)
 
 
-@app.get('/samples/{record_id}/fields/{field}')
-def field_image(record_id: str, field: str):
-    return FileResponse(field_path(record_id, field))
-
-def field_path(record_id: str, field: str):
+def _field_path(record_id: str, field: str):
     if field not in {'sample_id', 'machine', 'date_sampled', 'component', 'serial_number', 'reference_lube'}:
         raise HTTPException(404, 'Field crop unavailable.')
-    folder, membership = member_folder(record_id)
+    folder = folder_for(record_id)
+    membership = STORE.sample(record_id)
     review = (membership or {}).get('review') or {}
     evidence = review.get('evidence') or {}
     run = evidence.get('run_id', '')
@@ -267,22 +256,23 @@ def field_path(record_id: str, field: str):
     root = folder/'analysis'/run
     path = root/f'field_{key}.jpg'
     if not path.is_file():
-        # Older records already have the individual text crops.
         number = evidence.get('sources', {}).get(key)
         if isinstance(number, int) and 1 <= number <= 8:
             path = root/f'photo_{number}_{key}.jpg'
     if not path.is_file():
-        # The preview's selected-photo reference can be absent on older scans.
-        # Look for this exact field in every photo in the same analysis run.
         path = next((root/f'photo_{number}_{key}.jpg' for number in range(1, 9)
                      if (root/f'photo_{number}_{key}.jpg').is_file()), path)
     if not path.is_file():
         raise HTTPException(404, 'Field crop unavailable. Check original photos.')
     return path
 
+@app.get('/samples/{record_id}/fields/{field}')
+def field_image(record_id: str, field: str):
+    return FileResponse(_field_path(record_id, field))
+
 @app.post("/sessions/{session_id}/samples/{record_id}/assistant")
 async def ask_assistant(session_id: str, record_id: str, request: AssistantRequest, connection: Request):
-    crop = field_path(record_id, request.field) if request.action == "read" and request.field != "date_received" else None
+    crop = _field_path(record_id, request.field) if request.action == "read" and request.field != "date_received" else None
     return await ASSISTANT.run(session_id, record_id, request, crop, connection.client.host if connection.client else "unknown")
 
 @app.post("/samples/{record_id}/review")

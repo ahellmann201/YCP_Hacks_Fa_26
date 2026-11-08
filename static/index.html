@@ -84,13 +84,18 @@ button:disabled,.disabled { opacity:.5; cursor:default; }
 .card.confirmed { border:2px solid var(--ok); }
 .assistant { border:1px solid var(--line); padding:14px; margin:14px 0; border-radius:8px; background:var(--focus); }
 .assistant button { font-size:14px; padding:9px 11px; }
-.camera-preview { display:block; width:100%; background:#111; }
+.camera-preview { display:block; width:100%; max-height:360px; background:#111; }
 .camera-frame { position:relative; }
 .camera-guide { position:absolute; left:30%; top:18%; width:40%; height:64%; border:3px dashed #fff; pointer-events:none; }
 .camera-guide.ready { border-color:#22c55e; }
 .camera-guide.three { left:0; top:0; width:100%; height:100%; border:0; background:linear-gradient(to right,transparent 33%,white 33%,white 33.3%,transparent 33.3%,transparent 66.3%,white 66.3%,white 66.6%,transparent 66.6%); }
 .photo-grid { display:flex; flex-wrap:wrap; gap:8px; }
 .photo-grid img { width:120px; height:90px; object-fit:contain; }
+.demo-close { margin-top:16px; }
+.bar-row { display:grid; grid-template-columns:148px 1fr 64px; gap:8px; align-items:center; margin:6px 0; font-size:14px; }
+.bar { height:14px; background:var(--line); border-radius:7px; overflow:hidden; }
+.bar span { display:block; height:100%; background:#2563eb; }
+.bar.baseline span { background:#94a3b8; }
 summary { cursor:pointer; padding:12px 0; }
 .original { width:100%; height:auto; margin:10px 0; }
 [hidden] { display:none!important; }
@@ -140,6 +145,18 @@ summary { cursor:pointer; padding:12px 0; }
             <p id="accuracy-detail" class="muted">Confirm reviewed samples to measure accuracy.</p>
         </div>
     </div>
+    <section class="demo-close" aria-label="Demo comparison">
+        <h2>Where this lands</h2>
+        <p class="muted">Time per tube. By hand is the 30-second target. The scanner bar is the recorded three-thread Pi run, 20.8 seconds, leaving out upload and review.</p>
+        <div class="bar-row"><span>By hand</span><div class="bar baseline"><span style="width:100%"></span></div><strong>30s</strong></div>
+        <div class="bar-row"><span>Scanner</span><div class="bar"><span style="width:69.3%"></span></div><strong>20.8s</strong></div>
+        <div class="bar-row" id="session-time-row" hidden><span>This session</span><div class="bar"><span id="session-time-bar"></span></div><strong id="session-time-value">—</strong></div>
+        <p class="muted">Exact fields on the small development set used to check the trained reader: 5 of 9 before that training, 6 of 9 after. This session fills in as confirmed reviews come back.</p>
+        <div class="bar-row"><span>Before training</span><div class="bar baseline"><span style="width:55.6%"></span></div><strong>5/9</strong></div>
+        <div class="bar-row"><span>Trained reader</span><div class="bar"><span style="width:66.7%"></span></div><strong>6/9</strong></div>
+        <div class="bar-row" id="session-accuracy-row" hidden><span>This session</span><div class="bar"><span id="session-accuracy-bar"></span></div><strong id="session-accuracy-value">—</strong></div>
+        <p class="muted">Next is 1,000 samples. That is the set that teaches more handwriting and is how the time per tube comes down further from the 30 seconds it takes by hand.</p>
+    </section>
     <p class="muted">Timing leaves out upload, waiting, and review; accuracy uses confirmed fields only, and a confident reading can still be wrong.</p>
     <p id="status" class="status" role="status"></p>
     <p id="connection" class="muted error"></p>
@@ -199,8 +216,8 @@ const names = [
 const cards = new Map();
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
-const photoQueue = [];
 let assistantAvailable = false, assistantImageAvailable = false;
+const photoQueue = [];
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -337,7 +354,19 @@ function renderBar() {
         $("#average-detail").textContent=Number.isFinite(average)
             ? `${metrics.timed_tubes} tubes · ${average<=30?"Within":"Over"} 30s average target`
             : "No timed tubes yet.";
+        const sessionTime=$("#session-time-row");
+        if(Number.isFinite(average)) {
+            sessionTime.hidden=false;
+            $("#session-time-value").textContent=`${average.toFixed(1)}s`;
+            $("#session-time-bar").style.width=`${Math.min(100, average/30*100)}%`;
+        }
         const accuracy=metrics.field_accuracy_percent;
+        const sessionAccuracy=$("#session-accuracy-row");
+        if(Number.isFinite(accuracy)) {
+            sessionAccuracy.hidden=false;
+            $("#session-accuracy-value").textContent=`${accuracy.toFixed(0)}%`;
+            $("#session-accuracy-bar").style.width=`${Math.max(0, Math.min(100, accuracy))}%`;
+        }
         $("#field-accuracy").textContent=Number.isFinite(accuracy)?`${accuracy.toFixed(1)}%`:"—";
         $("#accuracy-detail").textContent=Number.isFinite(accuracy)
             ? `${metrics.correct_fields} correct / ${metrics.total_fields} fields · ${metrics.scored_tubes} confirmed tubes`
@@ -366,10 +395,10 @@ function saveCard(c,confirmed) {
     const version=c.version;
     const payload={
         session_id:sessionId, label_type:c.type.value,
-        confirmed, fields:values(c)
+        confirmed, fields:values(c),
+        expected_revision:c.revision||0
     };
     if(c.suggestion) {
-        payload.expected_revision=c.suggestion.revision;
         payload.suggestion_request_id=c.suggestion.request_id;
         payload.suggestion_field=c.suggestion.field;
     }
@@ -383,10 +412,10 @@ function saveCard(c,confirmed) {
         c.saveError=false;
         c.retry.hidden=true;
         session=result.session;
-        c.revision=result.review.revision;
-        c.suggestion=null;
         if(version===c.version) {
             c.dirty=false;
+            c.suggestion=null;
+            if(Number.isInteger(result.review?.revision)) c.revision=result.review.revision;
             c.serverConfirmed=confirmed;
             c.check.checked=confirmed;
             c.el.hidden=confirmed;
@@ -411,7 +440,7 @@ function edited(c, fromSuggestion=false) {
     const wasConfirmed=c.check.checked || c.serverConfirmed;
     c.version++;
     if(!fromSuggestion) c.suggestion=null;
-    if(c.assistantResult) {
+    if(c.assistantResult && c.assistantOutput) {
         c.assistantResult=null;
         c.assistantOutput.textContent="Review changed. Ask again for a current suggestion.";
     }
@@ -834,6 +863,8 @@ async function uploadPhotoFiles(files) {
         clearPhotos();
         say("Queued. You can photograph the next tube.");
         await refresh();
+        const review=$("#review-section");
+        if(review) review.scrollIntoView({behavior:"smooth", block:"start"});
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
     } finally {
@@ -981,7 +1012,7 @@ async function startCamera() {
         devices.filter(device=>device.kind==="videoinput").forEach((device,index)=>
             choice.append(new Option(device.label||`Camera ${index+1}`,device.deviceId)));
         choice.value=selected;
-        $("#camera-status").textContent="Camera ready. Center the label and rotate for another view.";
+        $("#camera-status").textContent="Camera ready. A steady label is captured. Three tubes use the automatic scan.";
         renderPhotoQueue();
     } catch(error) {
         stopCamera();
@@ -1157,7 +1188,8 @@ window.addEventListener("beforeunload",event=>{
 async function initialize() {
     renderBar();
     try {
-        const app=await api("/app"); bootId=app.boot_id; assistantAvailable=!!app.assistant_available;
+        const app=await api("/app"); bootId=app.boot_id;
+        assistantAvailable=!!app.assistant_available;
         assistantImageAvailable=!!app.assistant_image_available;
         let saved=null;
         try { saved=JSON.parse(sessionStorage.getItem(STORAGE)||"null"); } catch(_) {}
