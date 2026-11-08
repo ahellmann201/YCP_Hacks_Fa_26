@@ -1,6 +1,6 @@
 # Offline Sample Scanner
 
-Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. Current demo updates are on **`training`**.
+Photograph tube labels, group images by tube, read them on the Pi, correct fields beside their crops, and export one CSV per session. Scanning is offline after initial model preparation. Current demo updates are on **`training`**. The usual demo machine is the Pi. The same server can run from the Dell checkout: [Run on the Dell](#run-on-the-dell).
 
 ## Quick demo: Pi already running
 
@@ -38,6 +38,39 @@ samples.zip
 ```
 
 Limits: **100 tubes per ZIP**, **250 MiB archive**, **512 MiB uncompressed photos**, **8 photos per tube**, **10 MiB and 20 megapixels per photo**. HEIC/HEIF works inside ZIPs when the optional reader is installed. [ZIP guide](docs/BATCH_IMPORT.md) · [Review and cleanup](docs/REVIEW_AND_CLEANUP.md) · [Metrics](docs/SESSION_METRICS.md).
+
+## Run on the Dell
+
+Use this when the demo should run on the laptop instead of the Pi. It is the same site and the same OCR. The laptop keeps its own `uploads/` folder and `scanner.sqlite3`, so Pi sessions do not appear here, and starting this server does not clear the Pi. `scripts/start_demo.sh` is the Pi launcher; on Windows use the commands below. Do not copy this Windows `.venv-ocr` onto the Pi.
+
+Page behavior matches the Pi demo above: one tube or one ZIP, review, CSV, and **Ctrl+C** to stop. Starting the server empties this checkout’s `uploads/`. Download a CSV first if those photos are still needed. The RTX 3060 is for training. This server reads labels on the CPU.
+
+**First time only**, in PowerShell, from the checkout. This Dell’s `py -3` is Python 3.14, and the pinned requirements have Windows wheels for it.
+
+```powershell
+cd C:\Hackathons\YCP_Hack_Fa_26\YCP_Hacks_Fa_26
+py -3 -m venv .venv-ocr
+.\.venv-ocr\Scripts\python.exe -m pip install --upgrade pip
+.\.venv-ocr\Scripts\python.exe -m pip install -r requirements.txt -r requirements-heic.txt
+.\.venv-ocr\Scripts\python.exe tools\prepare_models.py
+.\.venv-ocr\Scripts\python.exe tools\prepare_models.py --check
+```
+
+`prepare_models.py` needs internet once so RapidOCR can cache its models. `--check` then confirms those models plus the included English recognizer with networking blocked. The scan itself stays offline after that.
+
+**Each later start:**
+
+```powershell
+cd C:\Hackathons\YCP_Hack_Fa_26\YCP_Hacks_Fa_26
+$env:SCANNER_OCR_THREADS = "3"
+.\.venv-ocr\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Keep that window open.
+
+1. **On the laptop:** open `http://127.0.0.1:8000`. Do not browse to `0.0.0.0`.
+2. **On the phone:** the phone has to reach the laptop. Run `ipconfig` and use the laptop address on the network the phone is actually joined to, for example `http://192.168.50.1:8000` only when the phone is on that same Ethernet link. Campus Wi-Fi cannot see the direct Dell–Pi address `192.168.50.1`. A phone hotspot works when the laptop is connected to that hotspot. **Take photo** uses the phone camera against whichever address opened the page.
+3. **Stop:** **Ctrl+C** in the PowerShell window. Closing the browser does not delete photos. The next start does.
 
 ## Cold start: the Pi was powered off
 
@@ -151,7 +184,7 @@ If VS Code still shows the old root files and many `M`/`A`/`U` markers, use the 
 
 | Symptom | Action |
 |---|---|
-| Phone cannot open the page | Keep the server terminal open. Use `http://` and the current reachable Pi IP; check hotspot connectivity. |
+| Phone cannot open the page | Keep the server terminal open. Use `http://` and the current reachable Pi IP; check hotspot connectivity. On the Dell, use the laptop address from [Run on the Dell](#run-on-the-dell), not `192.168.50.2`. |
 | SSH times out | Check Ethernet link and the `.50.1`/`.50.2` adapter settings above; use the Pi display for recovery. |
 | GitHub hostname cannot resolve | Reconnect Pi Wi-Fi/default route or DNS. Prepared OCR does not need GitHub. |
 | Old controls remain | Refresh/reopen the page after HTML updates. Restart after Python updates. |

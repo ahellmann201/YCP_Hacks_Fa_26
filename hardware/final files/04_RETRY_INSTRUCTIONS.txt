@@ -1,0 +1,17 @@
+CURRENT PRINT ORDER - WIDE KEY REVISION
+The user reports the wide-key retry printed successfully. Check that a
+trimmed key also holds the existing test joint firmly before the full print.
+NEXT: 01_BASE_WIDE_KEYS_BRIM_P1P_PLA.gcode.3mf
+Then: 02_gears_and_washers_P1P_PLA.gcode.3mf
+
+The base slice includes six 16 mm grip keys with the unchanged 3.4 mm stem,
+plus the base, four legs and two motor brackets. It uses the same 8 mm
+zero-gap brim and slow first layer as the successful key retry. Keys keep
+slow upper-layer speeds; larger parts use normal speeds. Trim brims
+flush after cooling, especially around pegs and key stems. Keep 100% scale.
+The two previously printed keys can be spares. The 04 file remains available
+for printing replacement keys only; the older 00 fit slice has narrow keys.
+See PRINT_AND_ASSEMBLY.txt for the updated base estimate and assembly steps.
+No printer has been started remotely. Loaded assembly fit remains untested.
+--- END CURRENT RETRY NOTE ---
+

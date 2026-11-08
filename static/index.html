@@ -46,6 +46,8 @@ a { color:var(--link); }
 .brand { display:flex; align-items:center; gap:12px; min-width:0; }
 .brand img { height:42px; width:auto; background:#fff; border-radius:8px; padding:3px; }
 .title-row h1 { margin:0; color:var(--text); }
+.photo-grid { display:flex; gap:8px; overflow:auto; margin:6px 0; }
+.photo-grid img { height:64px; width:64px; object-fit:cover; border-radius:6px; background:var(--image); }
 .metrics { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
 .metric { flex:1 1 140px; padding:8px 10px; background:var(--metric); border-radius:8px; }
 .metric strong { display:block; font-size:20px; margin:2px 0; }
@@ -106,7 +108,12 @@ summary { cursor:pointer; padding:12px 0; }
     </div>
     <input id="photos" type="file"
         accept="image/jpeg,image/png,image/webp,.zip,application/zip,application/x-zip-compressed" multiple hidden>
+    <input id="iphone-camera" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
+    <button id="take-iphone-photo" class="theme-toggle" type="button">Take photo</button>
     <button id="upload" type="button">Upload samples</button>
+    <button id="clear-photos" class="theme-toggle" type="button" hidden>Clear photos</button>
+    <p id="photo-count" class="muted" hidden></p>
+    <div id="photo-previews" class="photo-grid"></div>
     <a id="download" class="button" hidden>Download current CSV</a>
     <button id="finish-export" type="button" hidden>Download CSV & finish session</button>
     <label style="display:block;margin:6px 0;font-size:15px;">
@@ -159,6 +166,7 @@ const names = [
 const cards = new Map();
 let session = null, sessionId = null, bootId = null;
 let uploading = false, refreshing = false, writes = 0, initialized = false, finishing = false;
+const photoQueue = [];
 
 function say(text,error=false) {
     $("#status").textContent=text;
@@ -280,7 +288,12 @@ function renderBar() {
         c.check.disabled=finishing || c.operations>0;
     });
     $("#upload").disabled=uploading || finishing || !initialized;
-    $("#upload").textContent=uploading?"Uploading…":"Upload samples";
+    $("#upload").textContent=uploading?"Uploading…"
+        : photoQueue.length?`Upload ${photoQueue.length} photo${photoQueue.length===1?"":"s"}`
+        : "Upload samples";
+    $("#take-iphone-photo").disabled=uploading || finishing || !initialized || photoQueue.length>=8;
+    $("#clear-photos").hidden=!photoQueue.length;
+    $("#clear-photos").disabled=uploading || finishing;
     const blocked=finishing || writes>0 || [...cards.values()].some(c=>c.saveError || c.dirty);
     if(session) {
         const metrics=session.metrics||{};
@@ -684,8 +697,69 @@ $("#finish-export").onclick=async()=>{
     } finally { finishing=false; renderBar(); }
 };
 
+function renderPhotoQueue() {
+    const count=$("#photo-count");
+    count.hidden=!photoQueue.length;
+    count.textContent=photoQueue.length?`${photoQueue.length}/8 photos for this tube. Take another view, then upload.` : "";
+    const gallery=$("#photo-previews");
+    gallery.replaceChildren();
+    photoQueue.forEach(photo=>{
+        const image=document.createElement("img");
+        image.src=photo.previewUrl;
+        image.alt="Phone photo for this tube";
+        gallery.append(image);
+    });
+    renderBar();
+}
+function clearPhotos() {
+    photoQueue.forEach(photo=>URL.revokeObjectURL(photo.previewUrl));
+    photoQueue.length=0;
+    renderPhotoQueue();
+}
+function addPhonePhotos(files) {
+    if(photoQueue.length+files.length>8) return say("Maximum 8 photos of one tube.",true);
+    for(const file of files) {
+        if(!["image/jpeg","image/png","image/webp"].includes(file.type))
+            return say("Use JPG, PNG, or WebP. On iPhone, use Camera → Formats → Most Compatible.",true);
+        if(!file.size || file.size>10*1024*1024)
+            return say("Each photo must be nonempty and 10 MB or smaller.",true);
+    }
+    files.forEach(file=>photoQueue.push({file, previewUrl:URL.createObjectURL(file)}));
+    renderPhotoQueue();
+    say(`${photoQueue.length}/8 photos ready. Take another view or upload this tube.`);
+}
+async function uploadPhotoFiles(files) {
+    uploading=true; renderBar(); say("Uploading…");
+    try {
+        await ensureSession();
+        const form=new FormData();
+        files.forEach(file=>form.append("files",file));
+        form.append("session_id",sessionId);
+        form.append("date_received",today());
+        await api("/upload",{method:"POST",body:form});
+        clearPhotos();
+        say("Queued. You can photograph the next tube.");
+        await refresh();
+    } catch(error) {
+        say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
+    } finally {
+        uploading=false; $("#photos").value=""; renderBar();
+    }
+}
+$("#take-iphone-photo").onclick=()=>{
+    if(uploading || finishing || !initialized || photoQueue.length>=8) return;
+    $("#iphone-camera").value="";
+    $("#iphone-camera").click();
+};
+$("#iphone-camera").onchange=()=>{
+    const files=Array.from($("#iphone-camera").files);
+    if(files.length && !uploading && !finishing) addPhonePhotos(files);
+    $("#iphone-camera").value="";
+};
+$("#clear-photos").onclick=clearPhotos;
 $("#upload").onclick=()=>{
     if(uploading || finishing || !initialized) return;
+    if(photoQueue.length) return uploadPhotoFiles(photoQueue.map(photo=>photo.file));
     $("#photos").value=""; $("#photos").click();
 };
 $("#photos").onchange=async()=>{
@@ -705,21 +779,7 @@ $("#photos").onchange=async()=>{
         if(!file.size || file.size>10*1024*1024)
             return say("Each photo must be nonempty and 10 MB or smaller.",true);
     }
-    uploading=true; renderBar(); say("Uploading…");
-    try {
-        await ensureSession();
-        const form=new FormData();
-        files.forEach(file=>form.append("files",file));
-        form.append("session_id",sessionId);
-        form.append("date_received",today());
-        await api("/upload",{method:"POST",body:form});
-        say("Queued. You can upload another tube.");
-        await refresh();
-    } catch(error) {
-        say(error.message+"\nIf the connection failed, check the queue before uploading the same tube again.",true);
-    } finally {
-        uploading=false; $("#photos").value=""; renderBar();
-    }
+    await uploadPhotoFiles(files);
 };
 async function uploadArchive(file) {
     if(!file || uploading) return;
@@ -741,7 +801,7 @@ async function uploadArchive(file) {
     }
 }
 window.addEventListener("beforeunload",event=>{
-    if(uploading || writes || [...cards.values()].some(c=>c.dirty)) {
+    if(uploading || photoQueue.length || writes || [...cards.values()].some(c=>c.dirty)) {
         event.preventDefault(); event.returnValue="";
     }
 });

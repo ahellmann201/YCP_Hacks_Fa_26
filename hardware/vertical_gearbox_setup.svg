@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="730" viewBox="0 0 1200 730">
+<defs><style>
+text{font-family:Arial,sans-serif;fill:#23313b}.title{font-size:30px;font-weight:bold}.heading{font-size:22px;font-weight:bold}.label{font-size:17px}.small{font-size:14px;fill:#506473}.box{fill:#f4f7f9;stroke:#cbd8df;stroke-width:2}.base{fill:#718692}.gear{fill:#f2af4a;stroke:#a96d1d;stroke-width:5}.socket{fill:#a9cbd9;stroke:#42758c;stroke-width:4}.tube{fill:#e8f2f7;stroke:#527889;stroke-width:3}.motor{fill:#495763;stroke:#27323b;stroke-width:3}.arrow{stroke:#227a60;stroke-width:4;fill:none;marker-end:url(#head)}
+</style><marker id="head" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0 0L0 6L8 3Z" fill="#227a60"/></marker></defs>
+<rect width="1200" height="730" fill="white"/><text x="45" y="52" class="title">One motor, one geared scan station</text>
+<text x="45" y="82" class="small">Move each tube from its own waiting holder into the powered socket to scan it.</text>
+
+<rect x="35" y="110" width="548" height="540" rx="18" class="box"/><text x="60" y="145" class="heading">Top view: gears mesh</text>
+<rect x="75" y="185" width="465" height="300" rx="18" class="base"/>
+<circle cx="225" cy="333" r="60" class="gear"/><circle cx="225" cy="333" r="12" fill="#647988"/><circle cx="405" cy="333" r="120" class="gear"/><circle cx="405" cy="333" r="42" class="socket"/>
+<path d="M194 217A120 120 0 0 1 269 219" class="arrow"/><path d="M462 211A136 136 0 0 1 501 265" class="arrow"/>
+<text x="110" y="518" class="label">Small motor pinion</text><text x="115" y="544" class="small">16 teeth</text>
+<text x="353" y="518" class="label">Socket gear</text><text x="365" y="544" class="small">32 teeth</text>
+<text x="76" y="592" class="small">The 2:1 gear ratio turns the tube once per two motor-gear turns.</text>
+
+<rect x="613" y="110" width="552" height="540" rx="18" class="box"/><text x="638" y="145" class="heading">Side view: motor below base</text>
+<rect x="653" y="390" width="465" height="28" rx="5" class="base"/>
+<rect x="692" y="438" width="127" height="145" rx="18" class="motor"/><text x="703" y="614" class="small">28BYJ-48 motor</text>
+<rect x="750" y="335" width="12" height="105" fill="#afc0c8" stroke="#60717a" stroke-width="2"/>
+<rect x="702" y="348" width="108" height="40" rx="5" class="gear"/>
+<rect x="917" y="317" width="16" height="104" rx="7" fill="#aec4cf"/>
+<rect x="810" y="348" width="230" height="40" rx="5" class="gear"/>
+<rect x="857" y="277" width="136" height="72" rx="12" class="socket"/>
+<rect x="879" y="283" width="92" height="52" rx="8" fill="#8662a8"/><text x="1000" y="307" class="small">cap down</text>
+<rect x="896" y="189" width="58" height="94" rx="27" class="tube"/><text x="968" y="219" class="small">tube up</text>
+<text x="680" y="668" class="small">The base and post stay still. Only the pinion and socket gear rotate.</text>
+</svg>
