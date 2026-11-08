@@ -290,6 +290,7 @@ def upload(files: List[UploadFile] = File(...),
         for number, file in enumerate(files, start=1):
             name = f"image_{number}{TYPES[file.content_type]}"
             size = 0
+            digest=hashlib.sha256()
             with (staging / name).open("wb") as output:
                 while True:
                     chunk = file.file.read(64 * 1024)
@@ -299,9 +300,10 @@ def upload(files: List[UploadFile] = File(...),
                     if size > 10 * 1024 * 1024:
                         raise HTTPException(413, "Maximum 10 MB per photo.")
                     output.write(chunk)
+                    digest.update(chunk)
             if not size:
                 raise HTTPException(400, "Empty photo.")
-            images.append({"filename": name, "size_bytes": size})
+            images.append({"filename": name, "size_bytes": size, "sha256":digest.hexdigest()})
 
         sample = {
             "record_id": record_id, "session_id": session_id,
@@ -311,7 +313,7 @@ def upload(files: List[UploadFile] = File(...),
         (staging / "sample.json").write_text(
             json.dumps(sample, indent=2), encoding="utf-8")
         staging.rename(destination)
-        STORE.register(session_id, record_id)
+        STORE.register(session_id, record_id, sample=sample)
         completed = True
         return {"record_id": record_id, "state": "queued"}
 
@@ -344,7 +346,8 @@ def upload_batch(archive: UploadFile = File(...), session_id: str = Form(...),
                 destination = UPLOADS/sample['record_id']
                 (staging/sample['record_id']).rename(destination)
                 moved.append(destination)
-            STORE.register_batch(session_id, [s['record_id'] for s in samples])
+            STORE.register_batch(session_id, [s['record_id'] for s in samples],
+                                 samples={s['record_id']:s for s in samples})
             committed = True
         return {'queued_samples':len(samples), 'record_ids':[s['record_id'] for s in samples]}
     except (BatchImportError, zipfile.BadZipFile, NotImplementedError) as error:

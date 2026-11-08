@@ -53,3 +53,10 @@ Cleanup removes only that session's UUID folders under `uploads/`, including ori
 SQLite field records, original field snapshots, metrics, and review metadata are retained so the CSV can still be generated again; photo evidence becomes unavailable after cleanup. The UI starts a new current session after successful cleanup. No cleanup runs merely from opening a CSV URL or fetching a preview.
 
 Verification includes 18 unit tests across review, preview, cleanup, queue, ZIP import, thread settings and benchmark summaries, plus disposable API checks for ZIP upload, field-crop serving, stale export rejection, session-only deletion, retained CSV contents and cleanup retries. Browser script syntax checks passed. Physical iPhone download behavior still needs checking on the device.
+
+
+## Repeated scans and circled components
+
+Within one session, identical photo sets are skipped before OCR (photo order does not matter). Different photos with the same successfully decoded Code 128 value keep the first completed record and one CSV row. OCR-only IDs are not duplicate proof. Conflicting duplicate readings expose the duplicate photos for comparison; existing edits are preserved. New sessions can scan the same tube again. Finishing a session clears duplicate photo folders too.
+
+Small-label component detection also checks closed black/grey rings, and the alignment canvas retains more of the bottom selection row. Ambiguous, clipped or heavily overwritten circles still need review; solid ink blobs are not reliable circle evidence. No handwriting model weights changed.

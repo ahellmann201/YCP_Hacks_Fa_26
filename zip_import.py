@@ -1,5 +1,6 @@
 """Bounded, offline folder-per-tube ZIP preparation; never extract archive paths."""
 import json
+import hashlib
 import stat
 from pathlib import PurePosixPath
 from uuid import uuid4
@@ -115,7 +116,11 @@ def prepare_archive(file, staging, session_id, received, created_at):
                         raw.unlink()
                 except (OSError, Image.DecompressionBombError) as error:
                     raise ImportError('Cannot read photo: '+entry.filename) from error
-                images.append({'filename':name, 'size_bytes':target.stat().st_size,
+                digest=hashlib.sha256()
+                with target.open('rb') as stream:
+                    for chunk in iter(lambda:stream.read(64*1024),b''):
+                        digest.update(chunk)
+                images.append({'filename':name, 'size_bytes':target.stat().st_size, 'sha256':digest.hexdigest(),
                                'original_name':entry.filename, 'detected_format':actual})
             sample = {'record_id':record_id, 'session_id':session_id, 'created_at':created_at,
                       'date_received':received, 'source_folder':source_folder,

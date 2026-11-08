@@ -252,7 +252,7 @@ function renderBar() {
         const q=session.counts||{};
         $("#queue").textContent=
             `${q.queued||0} waiting · ${q.processing||0} processing · `+
-            `${session.ready_count||0} need review · ${session.confirmed_count||0} confirmed`;
+            `${session.ready_count||0} need review · ${session.confirmed_count||0} confirmed · ${q.duplicate||0} duplicates skipped`;
         const includeAll=$("#include-unreviewed").checked;
         const exportCount=includeAll
             ? session.saved_count
@@ -553,10 +553,24 @@ function renderSession() {
     if(!session) return;
     (session.jobs||[]).forEach(job=>{
         if(job.state==="done") { addCard(job); return; }
-        const row=document.createElement("p");
+        const row=document.createElement("div");
         row.className="muted";
         row.textContent=`Upload ${job.record_id.slice(0,6)} — `+
-            ({queued:"waiting",processing:"processing",error:"failed"}[job.state]||job.state);
+            ({queued:"waiting",processing:"processing",error:"failed",duplicate:"duplicate skipped"}[job.state]||job.state);
+        if(job.state==="duplicate") {
+            row.append(document.createTextNode(` (${job.duplicate_reason||"same sample"}; first record kept)`));
+            if(job.duplicate_conflicts?.length) {
+                row.append(document.createTextNode(". OCR readings differed — compare these photos before finalizing."));
+                const details=document.createElement("details");
+                const summary=document.createElement("summary");summary.textContent="Compare duplicate photos";
+                details.append(summary);
+                for(let n=1;n<=(job.review?.image_count||1);n++) {
+                    const image=document.createElement("img");image.src=`/samples/${job.record_id}/images/${n}`;
+                    image.className="original";image.loading="lazy";image.alt=`Duplicate original photo ${n}`;details.append(image);
+                }
+                row.append(details);
+            }
+        }
         if(job.state==="error") {
             row.append(document.createTextNode(": "+(job.error||"Could not read")));
             const retry=document.createElement("button");
@@ -671,7 +685,7 @@ async function uploadArchive(file) {
         form.append("session_id",sessionId);
         form.append("date_received",today());
         const result=await api("/upload-batch",{method:"POST",body:form});
-        say(`${result.queued_samples} tubes queued separately in this session. You can upload more while they process.`);
+        say(`${result.queued_samples} tubes added to this session; identical uploads are skipped. You can upload more while they process.`);
         await refresh();
     } catch(error) {
         say(error.message+"\nIf the connection failed, check the queue before uploading the ZIP again.",true);

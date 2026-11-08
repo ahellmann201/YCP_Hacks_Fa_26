@@ -17,7 +17,7 @@ class QueueStore(SessionStore):
     def unfinished(self):
         with self.connection() as db:
             rows = db.execute('''SELECT s.id, s.name, s.created_at,
-                MAX(t.added_at) AS last_activity, COUNT(*) AS tubes,
+                MAX(t.added_at) AS last_activity, SUM(j.state!='duplicate') AS tubes,
                 SUM(j.state='queued') AS queued, SUM(j.state='processing') AS processing,
                 SUM(j.state='done') AS done, SUM(j.state='error') AS errors
                 FROM sessions s JOIN session_samples t ON t.session_id=s.id
@@ -31,9 +31,11 @@ class QueueStore(SessionStore):
             self._session(db, session_id)
             rows = db.execute('''SELECT s.record_id, s.review_json, j.state FROM session_samples s
                 JOIN scan_jobs j USING(record_id) WHERE s.session_id=? ORDER BY s.sequence''', (session_id,)).fetchall()
-            if not rows or any(row['state'] != 'done' for row in rows):
+            if not rows or any(row['state'] not in {'done','duplicate'} for row in rows):
                 raise SessionError('Wait for all tubes to finish successfully before clearing this session.')
-            reviews = [json.loads(row['review_json']) for row in rows]
+            reviews = [json.loads(row['review_json']) for row in rows if row['state']=='done']
+            if not reviews:
+                raise SessionError('No original completed samples are available for export.')
             if not include_unreviewed and any(not r.get('confirmed') for r in reviews):
                 raise SessionError('Review all tubes or include unreviewed samples in the CSV before clearing.')
             expected = hashlib.sha256(render_csv(reviews)).hexdigest()
@@ -55,22 +57,37 @@ class QueueStore(SessionStore):
                 )
             """)
             columns = {row['name'] for row in db.execute('PRAGMA table_info(scan_jobs)')}
-            for name, kind in [('queued_at', 'REAL'), ('timing_json', 'TEXT')]:
+            for name, kind in [('queued_at', 'REAL'), ('timing_json', 'TEXT'),('fingerprint','TEXT'),('duplicate_of','TEXT')]:
                 if name not in columns:
                     db.execute(f'ALTER TABLE scan_jobs ADD COLUMN {name} {kind}')
 
-    def register(self, session_id, record_id):
-        self.register_batch(session_id, [record_id])
+    def register(self, session_id, record_id, sample=None):
+        self.register_batch(session_id, [record_id],samples={record_id:sample} if sample else None)
 
-    def register_batch(self, session_id, record_ids):
+    def register_batch(self, session_id, record_ids, samples=None):
+        from sample_identity import photo_fingerprint
         with self.connection(write=True) as db:
             self._active(db, session_id)
             for record_id in record_ids:
                 self._attach(db, session_id, record_id)
+                if db.execute('SELECT 1 FROM scan_jobs WHERE record_id=?',(record_id,)).fetchone():
+                    continue
+                sample=(samples or {}).get(record_id) or {}
+                fingerprint=photo_fingerprint(sample.get('images',[]))
+                duplicate=None
+                if fingerprint:
+                    duplicate=db.execute('''SELECT j.record_id FROM scan_jobs j JOIN session_samples s USING(record_id)
+                        WHERE s.session_id=? AND j.fingerprint=? AND j.state IN ('queued','processing','done')
+                        ORDER BY s.sequence LIMIT 1''',(session_id,fingerprint)).fetchone()
+                if duplicate:
+                    review={'fields':{},'confirmed':False,'image_count':sample.get('image_count',1),
+                            'duplicate_of':duplicate['record_id'],'duplicate_reason':'identical photos'}
+                    db.execute('UPDATE session_samples SET review_json=? WHERE record_id=?',(json.dumps(review),record_id))
                 db.execute("""
-                    INSERT OR IGNORE INTO scan_jobs(record_id, state, queued_at)
-                    VALUES (?, 'queued', ?)
-                """, (record_id, time.time()))
+                    INSERT INTO scan_jobs(record_id, state, queued_at, fingerprint, duplicate_of)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (record_id,'duplicate' if duplicate else 'queued',time.time(),fingerprint,
+                        duplicate['record_id'] if duplicate else None))
 
     def recover(self):
         with self.connection(write=True) as db:
@@ -105,14 +122,31 @@ class QueueStore(SessionStore):
             timing = {'processing_seconds': processing_seconds, 'queue_seconds': waiting,
                       'total_seconds': waiting+processing_seconds if waiting is not None else None}
         with self.connection(write=True) as db:
+            duplicate_of=None
+            decoded=review.get('decoded_sample_id')
+            if decoded:
+                previous=db.execute('''SELECT s.record_id,s.review_json FROM session_samples s
+                    JOIN scan_jobs j USING(record_id) WHERE s.session_id=? AND s.record_id!=? AND j.state='done'
+                    ORDER BY s.sequence''',(job['session_id'],job['record_id'])).fetchall()
+                for row in previous:
+                    old=json.loads(row['review_json'])
+                    old_id=old.get('decoded_sample_id')
+                    if old_id==decoded:
+                        duplicate_of=row['record_id']
+                        review['duplicate_of']=duplicate_of;review['duplicate_reason']='same decoded barcode'
+                        old_fields=old.get('ocr_fields',old.get('original_fields',old.get('fields',{})))
+                        new_fields=review.get('ocr_fields',review['fields'])
+                        review['duplicate_conflicts']=[key for key in ['machine','component','date_sampled','serial_number','reference_lube']
+                            if str(old_fields.get(key) or '').strip()!=str(new_fields.get(key) or '').strip()]
+                        break
             db.execute("""
                 UPDATE session_samples SET review_json=?
                 WHERE record_id=? AND session_id=?
             """, (json.dumps(review), job["record_id"], job["session_id"]))
             db.execute("""
-                UPDATE scan_jobs SET state='done', error=NULL, notices_json=?, timing_json=?
+                UPDATE scan_jobs SET state=?, error=NULL, notices_json=?, timing_json=?, duplicate_of=?
                 WHERE record_id=?
-            """, (json.dumps(notices), json.dumps(timing), job["record_id"]))
+            """, ('duplicate' if duplicate_of else 'done',json.dumps(notices),json.dumps(timing),duplicate_of,job["record_id"]))
 
     def fail(self, record_id, error):
         with self.connection(write=True) as db:
@@ -146,9 +180,11 @@ class QueueStore(SessionStore):
                 WHERE s.session_id=? GROUP BY j.state
             """, (session_id,)).fetchall()
             result["counts"] = {row["state"]: row["total"] for row in counts}
+            result['saved_count']=result['counts'].get('done',0)
+            result['pending_count']=sum(result['counts'].get(state,0) for state in ['queued','processing','error'])
             rows = db.execute("""
                 SELECT s.record_id, s.sequence, s.review_json,
-                       j.state, j.error, j.notices_json, j.timing_json
+                       j.state, j.error, j.notices_json, j.timing_json, j.duplicate_of
                 FROM session_samples s JOIN scan_jobs j USING(record_id)
                 WHERE s.session_id=? ORDER BY s.sequence
             """, (session_id,)).fetchall()
@@ -159,7 +195,7 @@ class QueueStore(SessionStore):
             correct_fields = total_fields = scored_tubes = 0
             for row in rows:
                 review = json.loads(row["review_json"]) if row["review_json"] else {}
-                confirmed = bool(review.get("confirmed", False))
+                confirmed = row['state']=='done' and bool(review.get("confirmed", False))
                 timing = json.loads(row['timing_json']) if row['timing_json'] else None
                 if row['state'] == 'done' and timing is not None:
                     duration = timing.get('processing_seconds')
@@ -185,6 +221,9 @@ class QueueStore(SessionStore):
                     "sequence": row["sequence"],
                     "sample_id": review.get("fields", {}).get("sample_id", ""),
                     "state": row["state"], "error": row["error"],
+                    "duplicate_of":row['duplicate_of'],
+                    "duplicate_reason":review.get('duplicate_reason'),
+                    "duplicate_conflicts":review.get('duplicate_conflicts',[]),
                     "notices": json.loads(row["notices_json"]),
                     "timing": timing,
                     "review": {
@@ -201,6 +240,14 @@ class QueueStore(SessionStore):
                 'field_accuracy_percent': 100*correct_fields/total_fields if total_fields else None,
             }
             return result
+
+    def reviews(self, session_id):
+        with self.connection() as db:
+            self._session(db,session_id)
+            rows=db.execute('''SELECT s.review_json FROM session_samples s JOIN scan_jobs j USING(record_id)
+                WHERE s.session_id=? AND j.state='done' AND s.review_json IS NOT NULL ORDER BY s.sequence''',
+                (session_id,)).fetchall()
+            return [json.loads(row['review_json']) for row in rows]
 
     def confirmed_reviews(self, session_id):
         return [
@@ -371,6 +418,7 @@ class ScannerQueue:
             "label_type": kind, "saved_at": self.store.now(),
             "confirmed": False, "reviewed_at": None,
             "fields": fields, "raw_suggestions": raw,
+            "decoded_sample_id":result.get('decoded_sample_id'),
             "ocr_fields": ocr_fields, "ocr_candidates": candidates,
             "image_count": len(names),
             "source_folder": sample.get('source_folder'),

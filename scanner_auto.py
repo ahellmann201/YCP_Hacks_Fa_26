@@ -37,6 +37,7 @@ FIELDS = [
 
 TEMPLATES = {
     "small": {
+        "layout": "small",
         "size": (1200, 680),
         "barcode": (0.18, 0.02, 0.79, 0.25),
         "fields": {
@@ -182,6 +183,7 @@ def align_to_template(image, barcode, template, metadata=None):
 
     # Extend the canvas without moving the original template coordinates.
     canvas_width = round(template_width * 1.12)
+    canvas_height=round(height*1.12) if template.get('layout')=='small' else height
 
     position = barcode.position
 
@@ -225,7 +227,7 @@ def align_to_template(image, barcode, template, metadata=None):
     aligned = cv2.warpPerspective(
         image,
         transform,
-        (canvas_width, height),
+        (canvas_width, canvas_height),
         borderValue=(255, 255, 255),
     )
 
@@ -238,7 +240,7 @@ def align_to_template(image, barcode, template, metadata=None):
     coverage = cv2.warpPerspective(
         original_mask,
         transform,
-        (canvas_width, height),
+        (canvas_width, canvas_height),
         flags=cv2.INTER_NEAREST,
         borderValue=0,
     )
@@ -264,7 +266,7 @@ def prepare_field_crop(
 ):
     import numpy as np
 
-    height = aligned.shape[0]
+    height = template['size'][1]
 
     # Use the original template width, not the expanded canvas width.
     width = template["size"][0]
@@ -345,7 +347,8 @@ def read_circled_component(engine, aligned):
     import cv2
     import numpy as np
 
-    height, width = aligned.shape[:2]
+    height = TEMPLATES['small']['size'][1]
+    width = aligned.shape[1]
 
     start = int(height * 0.80)
     row = aligned[start:, :]
@@ -376,6 +379,18 @@ def read_circled_component(engine, aligned):
     numbers = set()
     kinds = set()
     checked = set()
+    # The original HSV mask only sees blue/purple pen. Also inspect closed
+    # black/grey rings, rejecting small printed glyph loops and open smears.
+    from component_marks import black_circle_crops
+    for key,crop in black_circle_crops(row,height):
+        if key in checked:
+            continue
+        checked.add(key)
+        text=re.sub(r'[^A-Z0-9]','',''.join(read_text(engine,crop,line=True)).upper())
+        if text in {'1','2','3','4','5','6'}:
+            numbers.add(text)
+        elif text in {'GS','NGS'}:
+            kinds.add(text)
 
     for contour in contours:
         if len(contour) < 5:
@@ -909,6 +924,7 @@ def process(job):
 
     return {
         "ocr_threads": ocr_threads(),
+        "decoded_sample_id":next(iter(barcode_ids)) if len(barcode_ids)==1 else None,
         "blank_fields": [field for field in FIELDS if not suggestions[field] and results
             and all(not entry.get('error') and field in entry.get('blank_fields',[]) for entry in results)],
         "label_type": label_type,
