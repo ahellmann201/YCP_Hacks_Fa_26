@@ -17,6 +17,8 @@ expanded_tube_labels.csv
 backups/
 *.log
 model-export/
+model-comparison-report*/
+model-comparison-cache/
 baseline-report*/
 PaddleOCR/
 *.pdparams

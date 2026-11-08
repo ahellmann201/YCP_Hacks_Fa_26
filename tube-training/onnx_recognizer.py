@@ -21,11 +21,11 @@ def prepare(image):
 
 
 class Recognizer:
-    def __init__(self,model_dir):
+    def __init__(self,model_dir,model_path=None):
         directory=Path(model_dir)
         self.characters=['blank']+(directory/'characters.txt').read_text(encoding='utf-8').splitlines()+[' ']
         options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
-        self.session=ort.InferenceSession(str(directory/'recognizer.onnx'),sess_options=options,providers=['CPUExecutionProvider'])
+        self.session=ort.InferenceSession(str(model_path or directory/'recognizer.onnx'),sess_options=options,providers=['CPUExecutionProvider'])
         if self.session.get_outputs()[0].shape[-1]!=len(self.characters):raise ValueError('Model/dictionary mismatch')
 
     def __call__(self,image):
