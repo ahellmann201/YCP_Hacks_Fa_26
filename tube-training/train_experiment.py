@@ -49,6 +49,8 @@ if __name__=='__main__':
     sys.path.insert(0,str(WRAPPER_DIR))
     from marker_augmentation import MarkerStrokeAugment
     transforms.MarkerStrokeAugment=MarkerStrokeAugment
+    from smudge_augmentation import SmudgeAugment
+    transforms.SmudgeAugment=SmudgeAugment
     config,device,logger,writer=train.program.preprocess(is_train=True)
     partial=config['Global'].get('train_last_block',False)
     original=train.build_model

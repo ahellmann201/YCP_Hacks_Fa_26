@@ -65,6 +65,9 @@ This saves per-field predictions for original and trained checkpoints. Report ra
 
 ## Current experiment results
 
+The newer [smudge robustness experiment](SMUDGE_TRAINING.md) improved clean development exact matches from 5/9 to 6/9 and fixed synthetic-smudge matches from 13/27 to 18/27. Its verified ONNX weights now supply Small-label machine/serial recognition. Dates and Large labels retain their existing paths. Review thresholds stay unchanged; these small, repeatedly used development sets do not establish general accuracy.
+
+
 The additional [thick-marker training experiments](MARKER_TRAINING.md) ran twenty further epochs with controlled stroke-width augmentation. Validation stayed at 5/9 and the separate two-field Sharpie-style reference still failed, so no new model was deployed. See the recorded comparison rather than assuming training itself improved recognition.
 
 The newer [cleaned-data and English fine-tuning experiments](TRAINING_EXPERIMENTS.md) completed all five stages. The selected English head-only candidate gets 5/9 raw exact matches, versus 4/9 originally, with character error rate 10.71% versus 19.64%. Date-formatted accuracy remains 5/9. These are preliminary development measurements; the Pi app still uses its existing recognizer.

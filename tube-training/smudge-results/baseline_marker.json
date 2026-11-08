@@ -1,0 +1,29 @@
+{
+  "fields": 2,
+  "raw_correct": 0,
+  "after_date_formatting_correct": 0,
+  "character_error_rate": 0.5555555555555556,
+  "predictions": [
+    {
+      "prediction": "37 ",
+      "expected": "27",
+      "confidence": 0.9760177135467529,
+      "field": "machine",
+      "tube_id": "supplied_label_126667",
+      "raw_exact": false,
+      "formatted_exact": false,
+      "edits": 2
+    },
+    {
+      "prediction": "4.13-34",
+      "expected": "4.13.26",
+      "confidence": 0.9322921633720398,
+      "field": "date_sampled",
+      "tube_id": "supplied_label_126667",
+      "raw_exact": false,
+      "formatted_exact": false,
+      "edits": 3
+    }
+  ],
+  "note": "Development validation on four Small-label tubes; no independent final test."
+}

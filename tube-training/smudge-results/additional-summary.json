@@ -1,0 +1,38 @@
+{
+  "baseline": {
+    "original_validation": {
+      "correct": 5,
+      "total": 9
+    },
+    "stress_test": {
+      "correct": 27,
+      "total": 54
+    },
+    "new_view": {
+      "correct": 2,
+      "total": 3
+    },
+    "blank_test": {
+      "correct": 2,
+      "total": 2
+    }
+  },
+  "smudge": {
+    "original_validation": {
+      "correct": 6,
+      "total": 9
+    },
+    "stress_test": {
+      "correct": 32,
+      "total": 54
+    },
+    "new_view": {
+      "correct": 2,
+      "total": 3
+    },
+    "blank_test": {
+      "correct": 2,
+      "total": 2
+    }
+  }
+}

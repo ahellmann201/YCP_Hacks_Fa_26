@@ -1,25 +1,25 @@
-# Fine-tuned English recognition candidate
+# Smudge-augmented English recognizer
 
-This offline ONNX model is an English PP-OCRv5 mobile recognizer fine-tuned for five epochs on 44 cleaned tube-field crops. Its backbone and normalization were frozen; training used mild image variations. The matching dictionary, Apache 2.0 license, checksums, metadata, and CPU conversion parity report are included.
+This offline English PP-OCRv5 mobile recognizer starts from the previous five-epoch English head checkpoint, then trains for 20 more epochs with the final backbone block and recognition heads trainable. Normalization remains frozen. Training uses the same 44 crops, with bounded faint ink transfer, local fading, marker-width variation and mild geometric/image augmentation. Original transcriptions and tube/source split boundaries are preserved. This trains recognition robustness, not a pixel-level smear-removal model.
 
-| Same nine development fields | Original multilingual | This candidate |
+| Development check | Previous English model | Smudge candidate |
 |---|---:|---:|
-| Raw exact matches | 4/9 | 5/9 |
-| After date formatting | 5/9 | 5/9 |
-| Character error rate | 19.64% | 10.71% |
+| Clean exact fields | 5/9 | 6/9 |
+| Clean character error rate | 10.71% | 8.93% |
+| Synthetic smudge exact fields | 13/27 | 18/27 |
+| Existing blur/rotation/brightness stress fields | 27/54 | 32/54 |
+| Additional readable views | 2/3 | 2/3 |
+| Blank fields | 2/2 | 2/2 |
+| Separate repeatedly inspected marker reference | 0/2 | 0/2 |
 
-Only four Small-label tubes are represented in validation. The set was repeatedly used to choose checkpoints, and some training labels were assistant-transcribed. This is a candidate for further testing, not evidence of general or Large-label accuracy. Dates remain problematic. See [training experiment details](../../tube-training/TRAINING_EXPERIMENTS.md).
+The nine clean fields come from only four Small-label tubes repeatedly used for checkpoint selection. Synthetic variants are correlated copies, not additional independent tubes. Some transcriptions were assistant-produced. These results support a development update, not a general accuracy claim or a guarantee of less review on unseen tubes. Dates remain difficult. See [experiment details](../../tube-training/SMUDGE_TRAINING.md).
 
-Conversion passed ONNX graph checking. All nine CPU Paddle predictions match ONNX and the standalone helper, with maximum absolute output difference 0.0000319481. Model size is 7,850,705 bytes. The user's Pi benchmark measured 1.25s loading, 0.66s first field, 0.63s warm median, and 96.7 MiB peak process memory, versus 1.60s / 0.81s / 0.70s / 114.2 MiB for the earlier trained multilingual model. These are standalone field-recognizer measurements.
+The app loads this model through `field_recognizer.py` for Small-label machine and serial-number crops only. Dates, Large-label text and circled component selections retain their existing recognition paths. Review thresholds are unchanged. No extra model, cleanup pass or OCR retry is added to the Pi pipeline. Missing/failed model loading or empty text falls back to original OCR. `SCANNER_FIELD_MODEL=rapidocr` selects the original pipeline.
 
-`scanner_auto.py` now uses this candidate for Small-label machine and serial-number crops through `field_recognizer.py`. Dates, Large labels, full-photo label detection, and circled selections retain the original OCR. RGB photo crops are converted to the recognizer's BGR input. The candidate is loaded once per tube worker when first needed; it is not kept resident between tubes. Missing/failed model loading or empty output falls back to original OCR. To compare the original pipeline on identical images, start the server with `SCANNER_FIELD_MODEL=rapidocr`; omit the setting to enable the candidate routing. Measure full per-tube latency and memory after integration: the worker still contains the original OCR model as well as this candidate.
-
-From the repository root on the Pi, test an existing **field crop**:
+The ONNX model is 7,850,705 bytes, the same architecture and size as its predecessor. Graph checking passed, all 36 CPU Paddle/ONNX predictions matched, and the standalone helper matched all 36. The parity report includes numerical tolerances. Windows CPU cropped-field testing measured roughly 0.02 seconds warm inference and 87.6 MiB process peak for this candidate, versus 88.6 MiB for the previous checkpoint. These are not Pi or full-tube timings. Rerun Pi benchmarks after updating; previous Pi results measured different weights.
 
 ```bash
 .venv-ocr/bin/python tube-training/onnx_recognizer.py "PATH/TO/photo_1_machine.jpg" --model-dir trained-model/english_finetuned_rec
 ```
 
-This recognizer handles cropped text only. Continue using barcode decoding for Sample ID and the existing app's label detection, cropping, and review workflow. Inference needs no network or usage-based service.
-
-Initialization: official PaddleOCR `en_PP-OCRv5_mobile_rec_pretrained.pdparams`, from [Paddle's model repository](https://paddle-model-ecology.bj.bcebos.com/paddlex/official_pretrained_model/en_PP-OCRv5_mobile_rec_pretrained.pdparams). Training source revision: `dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf`. Training used Paddle 3.2.2 GPU; conversion used Paddle 3.1.1 CPU and paddle2onnx 2.1.0; CPU inference parity used ONNXRuntime 1.31.1.
+Initialization: official PaddleOCR English PP-OCRv5 mobile pretrained weights, followed by the recorded English head and smudge experiments. Training source revision `dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf`; Paddle 3.2.2 GPU for training, Paddle 3.1.1 CPU/paddle2onnx 2.1.0 for conversion, ONNXRuntime 1.31.1 CPU for parity. Apache 2.0 license and matching dictionary are included. Inference is entirely local.

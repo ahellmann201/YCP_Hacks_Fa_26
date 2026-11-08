@@ -1,14 +1,14 @@
 {
-  "samples": 9,
+  "samples": 36,
   "all_predictions_match": true,
-  "max_absolute_output_difference": 3.1948089599609375e-05,
+  "max_absolute_output_difference": 0.00011846423149108887,
   "numeric_tolerance": {
     "rtol": 0.001,
     "atol": 0.0001
   },
   "metrics": {
-    "acc": 0.5555549382722909,
-    "norm_edit_dis": 0.859788515578898
+    "acc": 0.6666664814815328,
+    "norm_edit_dis": 0.8756614101998729
   },
   "input": [
     "DynamicDimension.0",
@@ -26,63 +26,252 @@
       "expected": "UP6902",
       "paddle": "UP6902",
       "onnx": "UP6902",
-      "onnx_confidence": 0.9937087893486023,
+      "onnx_confidence": 0.9974732995033264,
+      "match": true
+    },
+    {
+      "expected": "UP6902",
+      "paddle": "UP6902",
+      "onnx": "UP6902",
+      "onnx_confidence": 0.9976434707641602,
+      "match": true
+    },
+    {
+      "expected": "UP6902",
+      "paddle": "UP6902",
+      "onnx": "UP6902",
+      "onnx_confidence": 0.9974508285522461,
+      "match": true
+    },
+    {
+      "expected": "UP6902",
+      "paddle": "UP6902",
+      "onnx": "UP6902",
+      "onnx_confidence": 0.9975479245185852,
       "match": true
     },
     {
       "expected": "9.27.26",
       "paddle": "9.27-d6",
       "onnx": "9.27-d6",
-      "onnx_confidence": 0.8506776690483093,
+      "onnx_confidence": 0.8227255940437317,
+      "match": true
+    },
+    {
+      "expected": "9.27.26",
+      "paddle": "9.27-d6",
+      "onnx": "9.27-d6",
+      "onnx_confidence": 0.8171300292015076,
+      "match": true
+    },
+    {
+      "expected": "9.27.26",
+      "paddle": "9.27-d6",
+      "onnx": "9.27-d6",
+      "onnx_confidence": 0.7540340423583984,
+      "match": true
+    },
+    {
+      "expected": "9.27.26",
+      "paddle": "9.27-d6",
+      "onnx": "9.27-d6",
+      "onnx_confidence": 0.8673304915428162,
       "match": true
     },
     {
       "expected": "PP9710241",
       "paddle": "PP9710241",
       "onnx": "PP9710241",
-      "onnx_confidence": 0.9634513854980469,
+      "onnx_confidence": 0.9450049996376038,
+      "match": true
+    },
+    {
+      "expected": "PP9710241",
+      "paddle": "PP9710241",
+      "onnx": "PP9710241",
+      "onnx_confidence": 0.9933607578277588,
+      "match": true
+    },
+    {
+      "expected": "PP9710241",
+      "paddle": "PP9710241",
+      "onnx": "PP9710241",
+      "onnx_confidence": 0.9891753792762756,
+      "match": true
+    },
+    {
+      "expected": "PP9710241",
+      "paddle": "PP9710241",
+      "onnx": "PP9710241",
+      "onnx_confidence": 0.9932613372802734,
       "match": true
     },
     {
       "expected": "UP6337",
       "paddle": "UP6337",
       "onnx": "UP6337",
-      "onnx_confidence": 0.9370864033699036,
+      "onnx_confidence": 0.982032299041748,
+      "match": true
+    },
+    {
+      "expected": "UP6337",
+      "paddle": "UP6337",
+      "onnx": "UP6337",
+      "onnx_confidence": 0.982093334197998,
+      "match": true
+    },
+    {
+      "expected": "UP6337",
+      "paddle": "UP6337",
+      "onnx": "UP6337",
+      "onnx_confidence": 0.9056510925292969,
+      "match": true
+    },
+    {
+      "expected": "UP6337",
+      "paddle": "UP6337",
+      "onnx": "UP6337",
+      "onnx_confidence": 0.9800719618797302,
       "match": true
     },
     {
       "expected": "8-2-26",
       "paddle": "8-2-26",
       "onnx": "8-2-26",
-      "onnx_confidence": 0.964276134967804,
+      "onnx_confidence": 0.9678745269775391,
+      "match": true
+    },
+    {
+      "expected": "8-2-26",
+      "paddle": "8-2-26",
+      "onnx": "8-2-26",
+      "onnx_confidence": 0.9629378318786621,
+      "match": true
+    },
+    {
+      "expected": "8-2-26",
+      "paddle": "8-2-26",
+      "onnx": "8-2-26",
+      "onnx_confidence": 0.9665543437004089,
+      "match": true
+    },
+    {
+      "expected": "8-2-26",
+      "paddle": "8-2-26",
+      "onnx": "8-2-26",
+      "onnx_confidence": 0.9593939781188965,
       "match": true
     },
     {
       "expected": "PP0004037",
       "paddle": "PP0004037",
       "onnx": "PP0004037",
-      "onnx_confidence": 0.9708402156829834,
+      "onnx_confidence": 0.9906452894210815,
+      "match": true
+    },
+    {
+      "expected": "PP0004037",
+      "paddle": "PP0004037",
+      "onnx": "PP0004037",
+      "onnx_confidence": 0.9909375309944153,
+      "match": true
+    },
+    {
+      "expected": "PP0004037",
+      "paddle": "PP0004037",
+      "onnx": "PP0004037",
+      "onnx_confidence": 0.9917221069335938,
+      "match": true
+    },
+    {
+      "expected": "PP0004037",
+      "paddle": "PP0004037",
+      "onnx": "PP0004037",
+      "onnx_confidence": 0.9396920800209045,
       "match": true
     },
     {
       "expected": "9/20",
       "paddle": "7120",
       "onnx": "7120",
-      "onnx_confidence": 0.8323363065719604,
+      "onnx_confidence": 0.8962993621826172,
+      "match": true
+    },
+    {
+      "expected": "9/20",
+      "paddle": "7120",
+      "onnx": "7120",
+      "onnx_confidence": 0.8832769393920898,
+      "match": true
+    },
+    {
+      "expected": "9/20",
+      "paddle": "7120",
+      "onnx": "7120",
+      "onnx_confidence": 0.8755176067352295,
+      "match": true
+    },
+    {
+      "expected": "9/20",
+      "paddle": "7120",
+      "onnx": "7120",
+      "onnx_confidence": 0.8872219324111938,
       "match": true
     },
     {
       "expected": "UP7102",
-      "paddle": "UP 7102",
-      "onnx": "UP 7102",
-      "onnx_confidence": 0.8472567796707153,
+      "paddle": "UP7102",
+      "onnx": "UP7102",
+      "onnx_confidence": 0.9532855153083801,
+      "match": true
+    },
+    {
+      "expected": "UP7102",
+      "paddle": "UP7102",
+      "onnx": "UP7102",
+      "onnx_confidence": 0.9536886215209961,
+      "match": true
+    },
+    {
+      "expected": "UP7102",
+      "paddle": "UP7102",
+      "onnx": "UP7102",
+      "onnx_confidence": 0.9572740197181702,
+      "match": true
+    },
+    {
+      "expected": "UP7102",
+      "paddle": "UP7102",
+      "onnx": "UP7102",
+      "onnx_confidence": 0.968183696269989,
       "match": true
     },
     {
       "expected": "8/7",
       "paddle": "87",
       "onnx": "87",
-      "onnx_confidence": 0.9050962924957275,
+      "onnx_confidence": 0.9636897444725037,
+      "match": true
+    },
+    {
+      "expected": "8/7",
+      "paddle": "87",
+      "onnx": "87",
+      "onnx_confidence": 0.9802725315093994,
+      "match": true
+    },
+    {
+      "expected": "8/7",
+      "paddle": "87",
+      "onnx": "87",
+      "onnx_confidence": 0.9394458532333374,
+      "match": true
+    },
+    {
+      "expected": "8/7",
+      "paddle": "87",
+      "onnx": "87",
+      "onnx_confidence": 0.9609441161155701,
       "match": true
     }
   ]

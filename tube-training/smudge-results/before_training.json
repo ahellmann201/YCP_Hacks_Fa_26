@@ -1,0 +1,99 @@
+{
+  "fields": 9,
+  "raw_correct": 5,
+  "after_date_formatting_correct": 5,
+  "character_error_rate": 0.10714285714285714,
+  "predictions": [
+    {
+      "prediction": "UP6902",
+      "expected": "UP6902",
+      "confidence": 0.9937088489532471,
+      "field": "machine",
+      "tube_id": "tube_006",
+      "raw_exact": true,
+      "formatted_exact": true,
+      "edits": 0
+    },
+    {
+      "prediction": "9.27-d6",
+      "expected": "9.27.26",
+      "confidence": 0.8506788611412048,
+      "field": "date_sampled",
+      "tube_id": "tube_006",
+      "raw_exact": false,
+      "formatted_exact": false,
+      "edits": 2
+    },
+    {
+      "prediction": "PP9710241",
+      "expected": "PP9710241",
+      "confidence": 0.9634516835212708,
+      "field": "serial_number",
+      "tube_id": "tube_006",
+      "raw_exact": true,
+      "formatted_exact": true,
+      "edits": 0
+    },
+    {
+      "prediction": "UP6337",
+      "expected": "UP6337",
+      "confidence": 0.9370849132537842,
+      "field": "machine",
+      "tube_id": "tube_007",
+      "raw_exact": true,
+      "formatted_exact": true,
+      "edits": 0
+    },
+    {
+      "prediction": "8-2-26",
+      "expected": "8-2-26",
+      "confidence": 0.9642763137817383,
+      "field": "date_sampled",
+      "tube_id": "tube_007",
+      "raw_exact": true,
+      "formatted_exact": true,
+      "edits": 0
+    },
+    {
+      "prediction": "PP0004037",
+      "expected": "PP0004037",
+      "confidence": 0.9708402156829834,
+      "field": "serial_number",
+      "tube_id": "tube_007",
+      "raw_exact": true,
+      "formatted_exact": true,
+      "edits": 0
+    },
+    {
+      "prediction": "7120",
+      "expected": "9/20",
+      "confidence": 0.8323358297348022,
+      "field": "date_sampled",
+      "tube_id": "tube_008",
+      "raw_exact": false,
+      "formatted_exact": false,
+      "edits": 2
+    },
+    {
+      "prediction": "UP 7102",
+      "expected": "UP7102",
+      "confidence": 0.8472576141357422,
+      "field": "machine",
+      "tube_id": "tube_009",
+      "raw_exact": false,
+      "formatted_exact": false,
+      "edits": 1
+    },
+    {
+      "prediction": "87",
+      "expected": "8/7",
+      "confidence": 0.905097246170044,
+      "field": "date_sampled",
+      "tube_id": "tube_009",
+      "raw_exact": false,
+      "formatted_exact": false,
+      "edits": 1
+    }
+  ],
+  "note": "Development validation on four Small-label tubes; no independent final test."
+}

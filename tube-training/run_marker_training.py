@@ -17,6 +17,7 @@ def main():
     for name in ['base-run','dataset','repo','output']:
         p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--epochs',type=int,default=10)
+    p.add_argument('--smudge',action='store_true',help='Add bounded ink-transfer and fading augmentation')
     p.add_argument('--partial',action='store_true',help='Train final backbone block too, with normalization frozen')
     a=p.parse_args()
     if a.epochs<1:
@@ -43,6 +44,8 @@ def main():
     cfg['Metric']['ignore_space']=False
     transforms=copy.deepcopy(cfg['Eval']['dataset']['transforms'])
     transforms[1:1]=[{'MarkerStrokeAugment':None},{'MildTubeAugment':None}]
+    if a.smudge:
+        transforms.insert(1,{'SmudgeAugment':None})
     cfg['Train']['dataset']['transforms']=transforms
     for split,section in [('train','Train'),('val','Eval')]:
         cfg[section]['dataset'].update(data_dir=str(dataset),label_file_list=[str(dataset/(split+'.txt'))])
@@ -50,6 +53,7 @@ def main():
     path=out/'finetune.yml';path.write_text(yaml.safe_dump(cfg,sort_keys=False))
     (out/'dataset_fingerprints.json').write_text(json.dumps({r['crop']:hashlib.sha256((dataset/r['crop']).read_bytes()).hexdigest() for r in rows},indent=2))
     metadata={'base_checkpoint':str(weights),'epochs':a.epochs,'partial_backbone':a.partial,
+              'smudge_augmentation':a.smudge,
               'training_crops':sum(r['split']=='train' for r in rows),'validation_crops':sum(r['split']=='val' for r in rows),
               'note':'Existing labels retained; stroke-width augmentation is synthetic variation, not additional independent handwriting.'}
     (out/'experiment.json').write_text(json.dumps(metadata,indent=2))
