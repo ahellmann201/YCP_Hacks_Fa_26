@@ -1,0 +1,12 @@
+{
+  "objects": 2,
+  "estimated_seconds": 1312,
+  "filament_g": 1.82,
+  "brim_width_mm": 8,
+  "brim_gap_mm": 0,
+  "elephant_foot_compensation_mm": 0,
+  "grip_width_mm": 16,
+  "stem_width_mm": 3.4,
+  "gcode_md5": "2509c6b8689f9eff732f3b472a5f6af1",
+  "status": "Digitally checked; physical adhesion and locking fit need testing."
+}

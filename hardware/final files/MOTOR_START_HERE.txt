@@ -1,0 +1,99 @@
+UPDATE: speed commands 1/2/3 and next-view command n are now available.
+Read IPHONE_CAPTURE_AND_SPEED.txt first. Default startup speed is unchanged.
+
+FIRST MOTOR TEST - PROVISIONAL UNO Q / ULN2003 WIRING
+
+The project notes identify Arduino UNO Q, and the motor is confirmed as
+28BYJ-48 5V. The driver front-side label and motor supply rating still need
+confirmation. Do not energize based only on a board's appearance.
+
+Open motor_test/motor_test.ino in Arduino IDE. The sketch runs on the UNO Q's
+microcontroller, not as Python on its Linux processor. It starts with all
+four motor outputs LOW and waits for a serial command. Nothing is uploaded
+to your board by creating these files.
+
+IF YOUR DRIVER IS A STANDARD ULN2003 BOARD WITH IN1/IN2/IN3/IN4 AND +/- POWER:
+UNO Q header D8  -> driver IN1
+UNO Q header D9  -> driver IN2
+UNO Q header D10 -> driver IN3
+UNO Q header D11 -> driver IN4
+UNO Q GND       -> driver GND / -
+Regulated external 5V positive -> driver + / motor supply input
+External supply negative      -> driver GND / - (common with UNO Q GND)
+Motor's five-pin plug          -> matching driver motor socket
+
+Power the UNO Q through its normal suitable USB-C supply/connection. Use a
+separate regulated 5V motor supply with enough current; 1A is a practical
+starting supply rating for ONE motor, not a verified rating of your supply.
+Do not connect the external positive to UNO Q VIN, 3V3, GPIO or its USB 5V rail.
+Only the supply grounds are shared in this arrangement. The driver switches
+the motor-coil current; the GPIOs carry only control signals. Check the board's
+power jumper and polarity against its actual labels. Make connections with
+power disconnected. Do not use a 9V/12V supply on this 5V motor.
+
+UNO Q header D8-D11 use 3.3V logic. TI's ULN2003A supports 3.3V control, but
+module variants must still be identified. This wiring is not for A4988,
+DRV8825, L298N, a bare IC, or a different connector arrangement.
+
+ARDUINO IDE SETUP
+1. Install/select the board package that contains Arduino UNO Q under Arduino
+   Zephyr Boards. Select UNO Q, not the classic Arduino Uno AVR board.
+2. Install Arduino_RouterBridge and its dependencies through Library Manager.
+   The sketch uses its Monitor object for the UNO Q virtual Serial Monitor.
+3. Select the actual UNO Q connection exposed by your installed setup. Follow
+   Arduino's UNO Q setup if it is not listed; do not guess a COM port.
+4. Click Verify. Resolve missing board/library messages before uploading.
+5. With motor power disconnected, upload the sketch. Uploading replaces the
+   existing MCU sketch, so save any existing sketch first. Then open Serial
+   Monitor, 115200 baud; newline or no line ending both work. Send ? for help.
+6. After driver/power wiring has been confirmed, apply motor power. Keep the
+   motor separate from the printed gears and tubes for the first test.
+7. Send j, then Enter/Send. The shaft should turn slowly about 45 degrees,
+   settle for 0.5 seconds, release its coils, and print DONE.
+8. Send r, then j, to check the opposite direction. Send s at any time to stop.
+9. Send m only after the jog works. It requests about one motor-shaft turn.
+10. After mechanical assembly passes hand-turning tests, t requests two
+    motor-shaft turns, or about one tube revolution through the 20:40 gears.
+
+COMMANDS
+j  Short jog: 512 half steps, about 2-3 seconds.
+m  One nominal motor-output-shaft turn: 4096 half steps, about 17 seconds.
+t  One nominal tube turn through our gears: 8192 half steps, about 33 seconds.
+r  Reverse the next move (only while idle).
+s  Stop immediately when processed and switch all coil outputs off.
+?  Show help. No motion.
+
+The sketch starts and ends slowly, uses nonblocking stepping so s can be
+processed during motion, rejects a new move while busy, and releases coils
+after a short settling pause. Released coils do not actively hold position.
+This is a bench test, not yet a camera-trigger or Android integration.
+
+IF IT DOES NOT WORK
+- No LEDs or movement: check motor supply, ground and connector seating.
+- LEDs sequence but shaft only buzzes: stop; verify IN1-IN4 order and motor
+  connector. Do not randomly swap live wires or increase voltage.
+- UNO Q resets: check its power and the motor's separate supply arrangement.
+- No serial response: send ?, verify UNO Q connection and RouterBridge support.
+- Stalls under load: disconnect gears and test the bare motor again. Check
+  friction, shaft fit and gear alignment before changing speed.
+- Excessive heat or smell: disconnect power and inspect wiring/driver rating.
+
+ANGLE ACCURACY
+4096 half steps per output turn is nominal. Some 28BYJ-48 gearboxes differ,
+and open-loop stepping cannot detect stalls or backlash. Mark the shaft/tube
+and calibrate real rotation before assigning image angles. All three tubes
+rotate together in the current mechanical design.
+
+VALIDATION STATUS
+The actual sketch passed a desktop simulation for idle startup, half-step
+patterns, reversal, busy-command rejection, stop while moving, micros timer
+rollover, 4096/8192-step counts, settling, and automatic coil release.
+It has NOT been compiled against the UNO Q board core or tested on hardware.
+The local Arduino installation currently exposes only an AVR core; UNO Q
+requires its own board package and RouterBridge libraries. No firmware was
+uploaded, and no motor was energized.
+
+REFERENCES
+https://docs.arduino.cc/tutorials/uno-q/user-manual/
+https://support.arduino.cc/hc/en-us/articles/27251870677916-Migrating-to-Zephyr-core-0-55-0-on-UNO-Q
+https://www.ti.com/lit/ds/symlink/uln2003a.pdf
